@@ -1,0 +1,106 @@
+name: Release Obsidian plugin
+
+on:
+    push:
+        tags:
+            - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+    contents: read
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            id-token: write
+            attestations: write
+            artifact-metadata: write
+        steps:
+            - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+              with:
+                  # タグが main に含まれるかを確かめるため、履歴をすべて取る
+                  fetch-depth: 0
+
+            - name: Use Node.js
+              uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+              with:
+                  node-version: 24
+                  cache: 'npm'
+
+            - name: Check the tag against the versions
+              run: |
+                  tag="$GITHUB_REF_NAME"
+                  manifest_version=$(jq -r '.version' manifest.json)
+                  package_version=$(jq -r '.version' package.json)
+                  min_app=$(jq -r '.minAppVersion' manifest.json)
+                  listed=$(jq -r --arg v "$tag" '.[$v] // empty' versions.json)
+                  fail=0
+                  if [ "$tag" != "$manifest_version" ]; then
+                      echo "::error::タグ $tag と manifest.json の version $manifest_version が違います"; fail=1
+                  fi
+                  if [ "$tag" != "$package_version" ]; then
+                      echo "::error::タグ $tag と package.json の version $package_version が違います"; fail=1
+                  fi
+                  if [ "$listed" != "$min_app" ]; then
+                      echo "::error::versions.json に \"$tag\": \"$min_app\" がありません（現在：${listed:-なし}）"; fail=1
+                  fi
+                  exit $fail
+
+            - name: Check that the tag is on main
+              run: |
+                  if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+                      echo "::error::タグ $GITHUB_REF_NAME のコミットが main に含まれていません"
+                      exit 1
+                  fi
+
+            - name: Install
+              run: npm ci
+
+            - name: Lint
+              run: npm run lint
+
+            - name: Test
+              run: npm test --if-present
+
+            - name: Build
+              run: npm run build
+
+            # 自動審査はソースから npm run build をやり直して配布物と比べる。
+            # 同じコミットから同じ main.js が出ることを確かめる。
+            - name: Check that the build is reproducible
+              run: |
+                  sha256sum main.js > "$RUNNER_TEMP/main.js.sha256"
+                  npm run build
+                  sha256sum --check "$RUNNER_TEMP/main.js.sha256"
+
+            - name: Check the release files
+              run: |
+                  for f in main.js manifest.json styles.css; do
+                      test -s "$f" || { echo "::error::$f がありません"; exit 1; }
+                  done
+
+            # GitHub Free では、attestation は公開リポジトリでしか使えない
+            - name: Attest build provenance
+              if: ${{ !github.event.repository.private }}
+              uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+              with:
+                  subject-path: |
+                      main.js
+                      styles.css
+
+            - name: Warn about skipped attestation
+              if: ${{ github.event.repository.private }}
+              run: echo "::warning::非公開リポジトリのため attestation を省略しました。公開してから版を上げてリリースし直してください"
+
+            # 必ず下書きで作る。添付ファイルと attestation を確かめてから人が公開する
+            - name: Create draft release
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  gh release create "$GITHUB_REF_NAME" \
+                    --title "$GITHUB_REF_NAME" \
+                    --draft \
+                    --verify-tag \
+                    --generate-notes \
+                    main.js manifest.json styles.css

@@ -1,0 +1,786 @@
+/* ===== 復習ボード ===== */
+.study-curve-board {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 12px;
+	overflow-y: auto;
+}
+
+.study-curve-header {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.study-curve-today {
+	font-weight: 600;
+}
+
+.study-curve-deck-filter {
+	font-size: 12px;
+}
+
+.study-curve-refresh {
+	margin-left: auto;
+	padding: 2px 6px;
+}
+
+.study-curve-section h3 {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 8px;
+	font-size: 14px;
+}
+
+.study-curve-count {
+	font-size: 11px;
+	color: var(--text-muted);
+	font-weight: 400;
+}
+
+.study-curve-empty {
+	font-size: 12px;
+	color: var(--text-muted);
+	padding: 6px 0;
+}
+
+/* ===== デッキカード ===== */
+.study-curve-deck-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+	gap: 8px;
+}
+
+.study-curve-deck-card {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	background: var(--background-secondary);
+}
+
+.study-curve-deck-card.is-sprint {
+	border-color: var(--color-red);
+}
+
+.study-curve-deck-name {
+	font-weight: 600;
+}
+
+.study-curve-deck-exam {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.study-curve-deck-exam.is-urgent {
+	color: var(--color-red);
+	font-weight: 600;
+}
+
+.study-curve-deck-stats {
+	display: flex;
+	gap: 10px;
+	flex-wrap: wrap;
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
+.study-curve-deck-stats .is-overdue,
+.study-curve-progress-table .is-overdue {
+	color: var(--color-red);
+	font-weight: 600;
+}
+
+.study-curve-progress-table .is-urgent {
+	color: var(--color-red);
+	font-weight: 600;
+}
+
+.study-curve-stage-bar {
+	display: flex;
+	height: 8px;
+	border-radius: 4px;
+	overflow: hidden;
+	background: var(--background-modifier-border);
+}
+
+.study-curve-stage-bar.is-empty {
+	opacity: 0.4;
+}
+
+/* 幅の比（件数）と濃さ（左ほど薄い）は、要素の CSS 変数で受け取る（#7）。
+   変数がなければ等幅で最も濃くする（壊れない見た目）。テーマから !important なしで上書きできる */
+.study-curve-stage-segment {
+	flex-grow: var(--study-curve-stage-count, 1);
+	opacity: var(--study-curve-stage-opacity, 1);
+	background: var(--interactive-accent);
+	font-size: 8px;
+	color: var(--text-on-accent);
+	text-align: center;
+	line-height: 8px;
+}
+
+.study-curve-deck-retention {
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
+.study-curve-deck-warning {
+	font-size: 11px;
+	color: var(--color-orange);
+}
+
+/* 設定にないデッキ名のカードの「設定に追加」 */
+.study-curve-deck-adopt {
+	align-self: flex-start;
+	font-size: 12px;
+}
+
+/* 設定済みのデッキのカードの「＋ ノート」（#10） */
+.study-curve-deck-add-note {
+	align-self: flex-start;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: var(--font-ui-smaller);
+	padding: 2px 8px;
+}
+
+/* 1行の入力ダイアログ（復習ノートの作成のタイトル） */
+.study-curve-text-input {
+	width: 100%;
+}
+
+/* 入力欄の下の補足（作るファイル名の確認、デッキの名前の変更で書き換えるノートの件数）。長いパスも折り返す */
+.study-curve-input-hint {
+	margin-top: 6px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	word-break: break-all;
+}
+
+/* 名前を変えていないときなど、出すものがなければ場所を取らない */
+.study-curve-input-hint:empty {
+	display: none;
+}
+
+/* ===== デッキが0件のときの案内（登録済みのノートからの取り込み、最初のデッキの作成） ===== */
+.study-curve-onboarding {
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.study-curve-onboarding-title {
+	font-weight: 600;
+}
+
+.study-curve-onboarding-desc {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.study-curve-onboarding-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.study-curve-onboarding-name {
+	font-weight: 600;
+}
+
+.study-curve-onboarding-folder {
+	flex: 1;
+	min-width: 0;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	word-break: break-all;
+}
+
+.study-curve-onboarding-actions {
+	display: flex;
+	justify-content: flex-end;
+}
+
+/* ===== 復習キュー ===== */
+.study-curve-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.study-curve-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 8px;
+	border-radius: 6px;
+	border-left: 3px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	flex-wrap: wrap;
+}
+
+/* 採点などの処理中。押した行を薄くし、ボタンは disabled の見た目に任せる */
+.study-curve-row.is-busy {
+	opacity: 0.6;
+}
+
+.study-curve-row.is-busy button {
+	cursor: progress;
+}
+
+.study-curve-row-overdue {
+	border-left-color: var(--color-red);
+}
+
+.study-curve-row-due {
+	border-left-color: var(--interactive-accent);
+}
+
+.study-curve-row-sprint {
+	border-left-color: var(--color-orange);
+}
+
+.study-curve-row-main {
+	flex: 1 1 200px;
+	min-width: 0;
+}
+
+.study-curve-row-title {
+	font-size: 13px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.study-curve-link {
+	cursor: pointer;
+}
+
+.study-curve-row-meta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	margin-top: 2px;
+}
+
+.study-curve-row-date {
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
+.study-curve-badge {
+	font-size: 10px;
+	padding: 0 6px;
+	border-radius: 8px;
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+.study-curve-badge-deck {
+	background: var(--background-modifier-border);
+	color: var(--text-normal);
+}
+
+.study-curve-badge-overdue {
+	background: var(--color-red);
+	color: var(--text-on-accent);
+}
+
+.study-curve-badge-sprint {
+	background: var(--color-orange);
+	color: var(--text-on-accent);
+}
+
+.study-curve-badge-due {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.study-curve-history {
+	display: flex;
+	gap: 2px;
+	align-items: center;
+}
+
+.study-curve-history-empty {
+	font-size: 10px;
+	color: var(--text-faint);
+}
+
+.study-curve-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	display: inline-block;
+}
+
+.study-curve-dot-good {
+	background: var(--color-green);
+}
+
+.study-curve-dot-hard {
+	background: var(--color-yellow);
+}
+
+.study-curve-dot-again {
+	background: var(--color-red);
+}
+
+/* 初見。保持を測った結果ではないので、◯△✗ とは別系統の色にしている。 */
+.study-curve-dot-fresh {
+	background: var(--color-blue);
+}
+
+.study-curve-row-actions {
+	display: flex;
+	gap: 4px;
+	align-items: center;
+}
+
+.study-curve-grade {
+	font-size: 11px;
+	padding: 2px 8px;
+}
+
+.study-curve-grade-good {
+	border-color: var(--color-green);
+}
+
+.study-curve-grade-hard {
+	border-color: var(--color-yellow);
+}
+
+.study-curve-grade-again {
+	border-color: var(--color-red);
+}
+
+.study-curve-grade-fresh {
+	border-color: var(--color-blue);
+}
+
+.study-curve-postpone {
+	padding: 2px 6px;
+	display: flex;
+	align-items: center;
+}
+
+.study-curve-unenroll {
+	padding: 2px 6px;
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+}
+
+.study-curve-unenroll:hover {
+	color: var(--color-red);
+	border-color: var(--color-red);
+}
+
+/* 確認モーダル（復習対象の解除やまとめての登録など、ノートを書き換える操作の前に挟む） */
+.study-curve-modal-buttons {
+	display: flex;
+	justify-content: flex-end;
+	/* ボタンが3つ並ぶとき（デッキの削除の確認）、狭い幅で折り返す */
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+/* デッキ作成ダイアログの警告とエラー。行の下ではなくボタンの上にまとめて出す */
+.study-curve-form-warning {
+	color: var(--text-warning);
+	font-size: var(--font-ui-small);
+}
+
+.study-curve-form-error {
+	color: var(--text-error);
+	font-size: var(--font-ui-small);
+}
+
+/* 確認ダイアログの対象一覧。長いパスは折り返して全部見せる */
+.study-curve-confirm-details {
+	margin: 8px 0 0;
+	padding-left: 20px;
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	word-break: break-all;
+}
+
+.study-curve-confirm-more {
+	list-style: none;
+	margin-left: -20px;
+	color: var(--text-faint);
+}
+
+/* まとめての登録の処理中に「未登録のノート」の見出しの右に出す */
+.study-curve-enrolling {
+	margin-left: 8px;
+	font-size: var(--font-ui-smaller);
+	font-weight: 400;
+	color: var(--text-muted);
+}
+
+/* ===== 予定グラフ ===== */
+.study-curve-forecast {
+	display: flex;
+	align-items: flex-end;
+	gap: 3px;
+	height: 110px;
+}
+
+.study-curve-forecast-col {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	height: 100%;
+	min-width: 0;
+}
+
+/* 高さは最大の日を 100% とした割合を、要素の CSS 変数で受け取る（#7）。
+   変数がなければ 0%（min-height の 2px）。テーマや CSS スニペットから !important なしで上書きできる */
+.study-curve-forecast-bar {
+	height: var(--study-curve-bar-height, 0%);
+	background: var(--interactive-accent);
+	border-radius: 3px 3px 0 0;
+	min-height: 2px;
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	font-size: 9px;
+	color: var(--text-on-accent);
+}
+
+/* 今日の棒は、予定日を過ぎて今日に数えた分（遅れ）を赤で下に、残りをほかの日と同じ色で塗り分ける（#90）。
+   遅れの割合（棒に対する %）は要素の CSS 変数で受け取る。2つ目の色の位置を 0 にすると、境目がぼけずに切り替わる */
+.study-curve-forecast-bar.has-overdue {
+	background: linear-gradient(
+		to top,
+		var(--color-red) var(--study-curve-overdue-height, 0%),
+		var(--interactive-accent) 0
+	);
+}
+
+.study-curve-forecast-label {
+	font-size: 9px;
+	color: var(--text-muted);
+	text-align: center;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+/* 遅れがないと今日の棒もほかの日と同じ色なので、日付を太字にして今日と分かるようにする（#90） */
+.study-curve-forecast-label.is-today {
+	font-weight: var(--font-bold);
+	color: var(--text-normal);
+}
+
+/* ===== 未登録ノート ===== */
+.study-curve-unregistered-head-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	flex-wrap: wrap;
+	margin-bottom: 8px;
+}
+
+.study-curve-unregistered-head-row h3 {
+	margin: 0;
+}
+
+.study-curve-dir-filter {
+	font-size: 12px;
+	padding: 3px 8px;
+	border-radius: 6px;
+	min-width: 160px;
+}
+
+.study-curve-unregistered {
+	margin-bottom: 10px;
+}
+
+.study-curve-unregistered-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	font-weight: 600;
+	margin-bottom: 4px;
+}
+
+.study-curve-enroll-all {
+	font-size: 11px;
+	padding: 1px 8px;
+}
+
+/* フォルダ単位のアコーディオン。演習日ごとにフォルダが増えるようなデッキで、
+   下の方のノートが埋もれて見えなくなるのを避けるため、既定は閉じておく。 */
+.study-curve-dir-group {
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.study-curve-dir-group:first-child {
+	border-top: none;
+}
+
+.study-curve-dir-group-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 2px;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.study-curve-dir-group-head:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: -2px;
+}
+
+.study-curve-dir-group-chevron {
+	display: flex;
+	align-items: center;
+	color: var(--text-muted);
+	flex-shrink: 0;
+}
+
+.study-curve-dir-group-label {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.study-curve-dir-group-enroll {
+	font-size: 10px;
+	padding: 1px 8px;
+}
+
+.study-curve-dir-group-body {
+	padding: 0 0 6px 22px;
+}
+
+.study-curve-unregistered-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	padding: 2px 0;
+}
+
+.study-curve-unregistered-row span {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.study-curve-unregistered-row button {
+	font-size: 11px;
+	padding: 1px 8px;
+}
+
+/* ===== コードブロック ===== */
+.study-curve-block {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.study-curve-block-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.study-curve-block-title {
+	font-weight: 600;
+	font-size: 13px;
+}
+
+.study-curve-progress-table {
+	width: 100%;
+	font-size: 12px;
+}
+
+/* ===== 設定タブ ===== */
+/* 数値と間隔の欄の、正しくない入力の理由。デッキの行の警告（空の名前、重複、見つからないフォルダ） */
+.study-curve-setting-error,
+.study-curve-deck-row-warning {
+	color: var(--text-error);
+	font-size: var(--font-ui-smaller);
+	margin-top: 4px;
+}
+
+.study-curve-setting-error:empty {
+	display: none;
+}
+
+/* デッキの行の概要。長いフォルダのパスは折り返す */
+.study-curve-deck-summary {
+	word-break: break-all;
+}
+
+/* ===== 画面幅への追従 =====
+   端末ではなく実際の幅で切り替える。Pixel の縦画面、iPad の分割表示、
+   Mac の狭いサイドバーが、どれも同じレイアウトになる。 */
+
+.is-narrow .study-curve-deck-grid {
+	grid-template-columns: 1fr;
+}
+
+/* 狭いときは1行を縦積みにして、採点ボタンを横いっぱいに広げる */
+.is-narrow .study-curve-row {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 6px;
+}
+
+.is-narrow .study-curve-row-main {
+	flex: 1 1 auto;
+}
+
+.is-narrow .study-curve-row-title {
+	white-space: normal;
+}
+
+.is-narrow .study-curve-row-actions {
+	width: 100%;
+}
+
+.is-narrow .study-curve-grade {
+	flex: 1;
+}
+
+/* 記号だけ残して文字を隠す。ボタンは作り直さないので再描画は起きない */
+.is-narrow .study-curve-grade-text {
+	display: none;
+}
+
+.is-narrow .study-curve-header .study-curve-deck-filter {
+	flex: 1;
+	min-width: 0;
+}
+
+/* 予定グラフの日付ラベルは間引く。詰まって読めなくなるのを防ぐ。
+   is-compact は is-narrow と同時に付くので、:not() で適用範囲を分けておく。
+   これが無いと「表示する」側のルールが両方とも勝ち、間引きの和集合が出て重なる。 */
+.is-narrow .study-curve-forecast-label {
+	visibility: hidden;
+}
+
+.is-narrow:not(.is-compact)
+	.study-curve-forecast-col:nth-child(2n + 1)
+	.study-curve-forecast-label {
+	visibility: visible;
+}
+
+.is-compact .study-curve-forecast-col:nth-child(3n + 1) .study-curve-forecast-label {
+	visibility: visible;
+}
+
+/* 表は横スクロールに逃がす（列を潰して読めなくしない） */
+.is-narrow .study-curve-progress-table {
+	display: block;
+	overflow-x: auto;
+	white-space: nowrap;
+}
+
+.is-narrow .study-curve-unregistered-row {
+	flex-wrap: wrap;
+}
+
+.is-narrow .study-curve-unregistered-row span {
+	flex: 1 1 100%;
+	white-space: normal;
+}
+
+.is-narrow .study-curve-unregistered-head-row {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.is-narrow .study-curve-dir-filter {
+	width: 100%;
+}
+
+.is-narrow .study-curve-dir-group-body {
+	padding-left: 12px;
+}
+
+/* 案内の行のボタンは折り返して横いっぱいにする */
+.is-narrow .study-curve-onboarding-row button {
+	width: 100%;
+}
+
+/* ===== タッチ操作 =====
+   iPad / Pixel では指で押せる大きさを確保する。
+   幅ではなく入力手段の問題なので、is-mobile で切り分ける。 */
+
+.is-mobile .study-curve-grade,
+.is-mobile .study-curve-postpone,
+.is-mobile .study-curve-unenroll,
+.is-mobile .study-curve-enroll-all,
+.is-mobile .study-curve-unregistered-row button,
+.is-mobile .study-curve-dir-group-enroll,
+.is-mobile .study-curve-refresh {
+	min-height: 36px;
+	min-width: 44px;
+	font-size: 13px;
+}
+
+.is-mobile .study-curve-dir-group-head {
+	min-height: 40px;
+}
+
+.is-mobile .study-curve-onboarding button,
+.is-mobile .study-curve-deck-adopt {
+	min-height: 44px;
+}
+
+.is-mobile .study-curve-deck-add-note {
+	min-height: 44px;
+	padding: 4px 12px;
+}
+
+.is-mobile .study-curve-dir-filter {
+	min-height: 36px;
+}
+
+.is-mobile .study-curve-row {
+	padding: 8px;
+}
+
+.is-mobile .study-curve-row-title {
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.is-mobile .study-curve-forecast {
+	height: 130px;
+}
+
+.is-mobile .study-curve-deck-filter {
+	min-height: 36px;
+}
+
+/* 設定画面のデッキの行の編集・削除は、タップしやすい大きさにする */
+.is-mobile .study-curve-deck-row .clickable-icon {
+	min-width: 44px;
+	min-height: 44px;
+}

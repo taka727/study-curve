@@ -1,0 +1,10 @@
+{
+	"id": "study-curve",
+	"name": "Study Curve",
+	"version": "1.0.0",
+	"minAppVersion": "1.7.2",
+	"description": "Schedule note reviews on the Ebbinghaus forgetting curve and see which notes are due today, with an optional cram mode before exams.",
+	"author": "taka727",
+	"authorUrl": "https://github.com/taka727",
+	"isDesktopOnly": false
+}

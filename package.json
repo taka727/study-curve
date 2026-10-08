@@ -1,0 +1,34 @@
+{
+	"name": "study-curve",
+	"version": "1.0.0",
+	"description": "Schedule note reviews on the Ebbinghaus forgetting curve and see which notes are due today, with an optional cram mode before exams.",
+	"main": "main.js",
+	"type": "module",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"deploy": "node scripts/deploy.mjs",
+		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"lint": "eslint .",
+		"test": "tsc -p tsconfig.test.json --noEmit && vitest run",
+		"test:watch": "vitest",
+		"qa:vault": "node scripts/make-test-vault.mjs"
+	},
+	"keywords": [],
+	"author": "taka727",
+	"license": "MIT",
+	"devDependencies": {
+		"@eslint/js": "^9.39.4",
+		"@types/node": "^22.15.17",
+		"esbuild": "0.25.5",
+		"eslint": "^9.39.4",
+		"eslint-plugin-obsidianmd": "^0.4.0",
+		"globals": "^17.6.0",
+		"jiti": "^2.6.1",
+		"obsidian": "latest",
+		"typescript": "^5.8.3",
+		"typescript-eslint": "^8.59.1",
+		"vite": "^7.3.6",
+		"vitest": "^5.0.3"
+	}
+}

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+	<!-- 掲載ページのアイコン（#17）。復習のたびに、次までの間隔が延びていく（1日後、3日後、7日後…）。PNG は icon-512.png -->
+	<title>Study Curve</title>
+	<rect width="512" height="512" rx="116" fill="#17332E"/>
+	<path d="M92,326 C92,256 148,256 148,326 M148,326 C148,206 244,206 244,326 M244,326 C244,116 412,116 412,326" fill="none" stroke="#F1EDE4" stroke-width="22" stroke-linecap="round"/>
+	<circle cx="92" cy="326" r="18" fill="#F1EDE4"/>
+	<circle cx="148" cy="326" r="20" fill="#F1EDE4"/>
+	<circle cx="244" cy="326" r="22" fill="#F1EDE4"/>
+	<circle cx="412" cy="326" r="30" fill="#F0A53A"/>
+</svg>
