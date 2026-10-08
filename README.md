@@ -234,7 +234,7 @@ Across devices:
 What it reads:
 
 - The frontmatter of every Markdown note in the vault (from Obsidian's metadata cache), to find enrolled notes. A note can be enrolled in any folder, so every note is checked. Nothing it reads leaves your vault
-- The names of your notes and folders, for the suggestions in the deck folder and "Review note template" fields
+- The paths of your folders and notes, for the suggestions in the deck folder and "Review note template" fields
 - The template file set in "Review note template", when you create a review note
 - Only when "Clear checks after grading" is on: the body of the note you grade
 
