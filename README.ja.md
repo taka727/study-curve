@@ -258,6 +258,10 @@ git push origin <版>
 
 修正を出すときは、必ず版を上げる（同じリリースのファイルを差し替えても反映されない）。
 
+## 応援する
+
+Study Curve が役に立ったら、[Buy Me a Coffee](https://buymeacoffee.com/taka727) から開発を応援できる。
+
 ## ライセンス
 
 [MIT](LICENSE)

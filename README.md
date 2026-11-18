@@ -280,6 +280,10 @@ git push origin <version>
 
 Always bump the version for a fix; replacing files in an existing release is not picked up.
 
+## Support
+
+If Study Curve helps your studies, you can support its development on [Buy Me a Coffee](https://buymeacoffee.com/taka727).
+
 ## License
 
 [MIT](LICENSE)
