@@ -261,9 +261,18 @@ export default class StudyCurvePlugin extends Plugin {
 		if (!Platform.isDesktop) return;
 		const el = this.addStatusBarItem();
 		el.addClass('mod-clickable');
+		// キーボードでもたどり着いて開けるように、ボタンとして扱う（ボードの開閉の見出しと同じ）
+		el.setAttr('role', 'button');
+		el.setAttr('tabindex', '0');
 		el.hide();
 		this.registerDomEvent(el, 'click', () => {
 			void this.activateBoard();
+		});
+		this.registerDomEvent(el, 'keydown', (event) => {
+			if (event.key === 'Enter' || event.key === ' ') {
+				event.preventDefault();
+				void this.activateBoard();
+			}
 		});
 		this.statusBarEl = el;
 		this.register(this.onIndexChange(() => this.renderStatusBar()));
