@@ -1,6 +1,6 @@
 {
 	"name": "study-curve",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"description": "Schedule note reviews on the Ebbinghaus forgetting curve and see which notes are due today, with an optional cram mode before exams.",
 	"main": "main.js",
 	"type": "module",
