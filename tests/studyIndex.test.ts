@@ -44,6 +44,11 @@ describe('parseNextDate', () => {
 		expect(parseNextDate('2026-09-26T')).toBeNull();
 		expect(parseNextDate(20260926)).toBeNull();
 	});
+
+	it('時刻付きで、日付の部分が実在しなければ null', () => {
+		expect(parseNextDate('2026-13-01T10:00')).toBeNull();
+		expect(parseNextDate('2026-02-30 9:30')).toBeNull();
+	});
 });
 
 describe('parseSuspended', () => {

@@ -1,5 +1,5 @@
 import { App, TFile } from 'obsidian';
-import { isISODate } from './dateUtils';
+import { isCalendarDate, isISODate } from './dateUtils';
 import { DeckConfig, Grade, GRADE_TOKENS, ReviewLogEntry, StudyNote } from './types';
 
 // frontmatter のキー。Dataview からも素直に読めるよう、絵文字やインライン
@@ -48,13 +48,14 @@ export function parseStage(raw: unknown): number {
 /**
  * frontmatter の study-next を読む。読めなければ null。
  * "2026-09-26T10:00" や "2026-09-26 10:00" のように時刻が付いていても、日付の部分を読む（#9）。
+ * 時刻付きの値は、切り出した日付が実在しなければ（2026-13-01 など）読めないものとして null を返す。
  */
 export function parseNextDate(raw: unknown): string | null {
 	if (typeof raw !== 'string') return null;
 	const value = raw.trim();
 	if (isISODate(value)) return value;
 	const match = /^(\d{4}-\d{2}-\d{2})[T ]\d{1,2}:\d{2}/.exec(value);
-	return match ? match[1]! : null;
+	return match && isCalendarDate(match[1]) ? match[1] : null;
 }
 
 /**

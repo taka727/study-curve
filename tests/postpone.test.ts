@@ -52,6 +52,12 @@ describe('applyPostpone', () => {
 		expect(fm['study-next']).toBe('2026-09-29');
 	});
 
+	it('study-next が時刻付きの未来の日時なら、その日付の翌日にする', () => {
+		const fm: Record<string, unknown> = { 'study-deck': 'A', 'study-next': '2026-10-01T10:00' };
+		expect(applyPostpone(fm, TODAY, NOT_SPRINT)).toBe('2026-10-02');
+		expect(fm['study-next']).toBe('2026-10-02');
+	});
+
 	it('study-next がなければ明日にする', () => {
 		const fm: Record<string, unknown> = { 'study-deck': 'A' };
 		expect(applyPostpone(fm, TODAY, NOT_SPRINT)).toBe('2026-09-29');
