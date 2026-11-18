@@ -12,6 +12,7 @@ import {
 	parseStage,
 } from './studyIndex';
 import { Grade } from './types';
+import { insertSelfCheckSection } from './selfCheck';
 
 export const HISTORY_LIMIT = 20;
 
@@ -56,6 +57,25 @@ async function clearSectionChecks(app: App, file: TFile, keyword: string): Promi
 	if (clearChecksInSection(current, keyword) === current) return false;
 	await app.vault.process(file, (data) => clearChecksInSection(data, keyword));
 	return true;
+}
+
+/**
+ * ノートに「思い出せるか」の空欄と判定表を差し込む（#2）。差し込んだら true、もう欄があれば false。
+ * 事前の確認は vault.read（ディスクから読む）で行い、書き換えは Vault.process がコールバックに渡す
+ * 最新の本文に対して行う（読み込みと書き込みのあいだの編集や同期を上書きしない）。
+ * そのあいだに欄が足されていたら、本文はそのまま返し、false を返す
+ */
+export async function insertSelfCheck(app: App, file: TFile): Promise<boolean> {
+	const current = await app.vault.read(file);
+	if (insertSelfCheckSection(current) === null) return false;
+	// 読んだあと・書く前に、別の操作や同期で欄が足されていることがある。実際に差し込んだかを返す
+	let inserted = false;
+	await app.vault.process(file, (data) => {
+		const next = insertSelfCheckSection(data);
+		inserted = next !== null;
+		return next ?? data;
+	});
+	return inserted;
 }
 
 // frontmatter の書き換えは必ず processFrontMatter を通す。

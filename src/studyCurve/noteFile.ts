@@ -4,13 +4,14 @@
 /** タイトルからファイル名に使える文字が残らなかったときのファイル名 */
 export const DEFAULT_NOTE_TITLE = '無題の復習ノート';
 
-/**
- * 内蔵の型。{{title}} などは renderTemplate で置き換える。
- * 見出し「思い出せるか」は、採点時にチェックを外す見出しの既定値（#20 の checkSectionHeading）とそろえる
- */
-export const DEFAULT_NOTE_TEMPLATE = `# {{title}}
+/** 「思い出せるか」の見出しに含まれる語。自己チェック欄がもうあるかの判定に使う（#2） */
+export const SELF_CHECK_KEYWORD = '思い出せるか';
 
-## ✅ 思い出せるか（読む前に）
+/**
+ * 「思い出せるか」の空欄と判定表。内蔵の型と、既存のノートに差し込むコマンド（#2）で同じものを使う。
+ * 末尾は改行1つで終わる
+ */
+export const SELF_CHECK_SECTION = `## ✅ 思い出せるか（読む前に）
 
 > 例を見て答えを思い浮かべてから、下の答え合わせを読む。
 
@@ -26,10 +27,24 @@ export const DEFAULT_NOTE_TEMPLATE = `# {{title}}
 | **◯** | 答え合わせの太字を自分の言葉で言えた | ステージ +1 |
 | **△** | 太字は言えたが「なぜ」が出てこない | 据え置き |
 | **✗** | 一度学んだはずなのに出てこない | 翌日 |
+`;
 
+/**
+ * 答え合わせの見出し。既存のノートに欄を差し込むときは、元の本文の前に置く（#2）。
+ * 「思い出せるか」の欄はこの見出しで終わるので、採点時にチェックを外すのは欄の中だけになる
+ */
+export const ANSWER_HEADING = '## 🎯 答え合わせ — これを覚えていればOK';
+
+/**
+ * 内蔵の型。{{title}} などは renderTemplate で置き換える。
+ * 見出し「思い出せるか」は、採点時にチェックを外す見出しの既定値（#20 の checkSectionHeading）とそろえる
+ */
+export const DEFAULT_NOTE_TEMPLATE = `# {{title}}
+
+${SELF_CHECK_SECTION}
 ---
 
-## 🎯 答え合わせ — これを覚えていればOK
+${ANSWER_HEADING}
 
 - **OK**：
 - **なぜ**：
