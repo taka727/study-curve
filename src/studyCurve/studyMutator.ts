@@ -352,6 +352,61 @@ export async function unenrollNote(
 }
 
 /** 所属デッキが直前総ざらいの期間中で、送れなかった */
+/** 採点で書き換える3つのキーの値。キーがなければ undefined */
+export interface GradeFields {
+	stage: unknown;
+	next: unknown;
+	history: unknown;
+}
+
+/** 採点の取り消し（#5）に使う、採点の前と後の値 */
+export interface GradeUndo {
+	before: GradeFields;
+	after: GradeFields;
+}
+
+export function gradeFields(fm: Record<string, unknown>): GradeFields {
+	return { stage: fm[FM_STAGE], next: fm[FM_NEXT], history: fm[FM_HISTORY] };
+}
+
+/** 採点のあとにノートが変わっていて、取り消せない（上書きしない） */
+export class UndoConflictError extends Error {
+	constructor() {
+		super('採点のあとにノートが変わっています');
+		this.name = 'UndoConflictError';
+	}
+}
+
+function restoreKey(fm: Record<string, unknown>, key: string, value: unknown): void {
+	if (value === undefined) delete fm[key];
+	else fm[key] = value;
+}
+
+/**
+ * 採点を取り消す（#5）。study-stage・study-next・study-history を採点の前の値に戻す（なかったキーは消す）。
+ * 3つのキーが採点で書いた値のままでなければ、UndoConflictError を投げて fm を変えない
+ * （続けて採点した、明日に送った、外した、手で書き換えたなどのあとで、その変更を消さないため）。
+ * 休止やデッキなど、ほかのキーと本文には触れない（本文のチェックを外していても戻さない）
+ */
+export function applyUndoGrade(fm: Record<string, unknown>, undo: GradeUndo): void {
+	const deckRaw = fm[FM_DECK];
+	if (typeof deckRaw !== 'string' || deckRaw.trim() === '') throw new UndoConflictError();
+	if (JSON.stringify(gradeFields(fm)) !== JSON.stringify(undo.after)) throw new UndoConflictError();
+	restoreKey(fm, FM_STAGE, undo.before.stage);
+	restoreKey(fm, FM_NEXT, undo.before.next);
+	restoreKey(fm, FM_HISTORY, undo.before.history);
+}
+
+/** 採点を取り消す。ファイルから読み直した frontmatter で判断する（applyUndoGrade） */
+export async function undoGradeNote(
+	app: App,
+	filePath: string,
+	undo: GradeUndo,
+	onWritten?: OnWritten,
+): Promise<void> {
+	await updateFrontMatter(app, filePath, (fm) => applyUndoGrade(fm, undo), onWritten);
+}
+
 export class PostponeInSprintError extends Error {
 	constructor(readonly deck: string) {
 		super(`${deck} は直前総ざらいの期間中です`);

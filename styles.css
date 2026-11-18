@@ -784,3 +784,8 @@
 	min-width: 44px;
 	min-height: 44px;
 }
+
+/* ===== 通知のボタン（採点の取り消し、#5） ===== */
+.study-curve-notice-action {
+	margin-left: 8px;
+}

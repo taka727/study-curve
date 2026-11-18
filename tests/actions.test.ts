@@ -424,6 +424,126 @@ describe('StudyActions.grade', () => {
 	});
 });
 
+describe('StudyActions.undoLastGrade（#5）', () => {
+	it('採点の前のステージ・次回日・履歴に戻し、通知する', async () => {
+		vault.add(A, { ...enrolled(), 'study-stage': 2, 'study-next': '2026-09-25', 'study-history': ['2026-09-18 ok'] });
+		await actions.grade(A, 'again');
+		expect(vault.fm(A)['study-stage']).toBe(0);
+		actions.viewsRefreshing();
+		noticeLog.length = 0;
+		// キャッシュはまだ採点した状態
+		const stale = cached(A);
+
+		expect(actions.canUndoGrade()).toBe(true);
+		expect(await actions.undoLastGrade()).toBe(true);
+		expect(vault.fm(A)).toEqual({
+			'study-deck': 'D',
+			'study-stage': 2,
+			'study-next': '2026-09-25',
+			'study-history': ['2026-09-18 ok'],
+		});
+		expect(noticeLog).toEqual(['A の採点（✗ 忘れた）を取り消しました']);
+		expect(actions.canUndoGrade()).toBe(false);
+		// キャッシュに反映されるまでは、取り消した状態をインデックスに使わせ、描き直す
+		expect(actions.stateFor(A, stale)?.stage).toBe(2);
+		expect(invalidateIndex).toHaveBeenCalledTimes(2);
+	});
+
+	it('採点の前になかったキーは消す', async () => {
+		vault.add(A, { 'study-deck': 'D' });
+		await actions.grade(A, 'good');
+		actions.viewsRefreshing();
+		await actions.undoLastGrade();
+		expect(vault.fm(A)).toEqual({ 'study-deck': 'D' });
+	});
+
+	it('取り消せる採点がなければ、何も書かずに通知する', async () => {
+		expect(actions.canUndoGrade()).toBe(false);
+		expect(await actions.undoLastGrade()).toBe(false);
+		expect(vault.writes).toBe(0);
+		expect(noticeLog).toEqual(['取り消せる採点はありません']);
+	});
+
+	it('取り消せるのは直前の1回だけ（2回目は何もしない）', async () => {
+		await actions.grade(A, 'good');
+		actions.viewsRefreshing();
+		await actions.undoLastGrade();
+		actions.viewsRefreshing();
+		const writes = vault.writes;
+		expect(await actions.undoLastGrade()).toBe(false);
+		expect(vault.writes).toBe(writes);
+	});
+
+	it('続けて採点したら、あとの採点だけを取り消す', async () => {
+		await actions.grade(A, 'good');
+		actions.viewsRefreshing();
+		await actions.grade(B, 'hard');
+		actions.viewsRefreshing();
+		await actions.undoLastGrade();
+		expect(vault.fm(A)['study-stage']).toBe(1);
+		expect(vault.fm(B)).toEqual(enrolled());
+	});
+
+	it('採点のあとに明日に送っていたら、取り消さずに知らせ、取り消せる対象から外す', async () => {
+		await actions.grade(A, 'good');
+		actions.viewsRefreshing();
+		await actions.postpone(studyNote(A, '2026-10-01'));
+		actions.viewsRefreshing();
+		const before = structuredClone(vault.fm(A));
+		noticeLog.length = 0;
+
+		expect(await actions.undoLastGrade()).toBe(false);
+		expect(vault.fm(A)).toEqual(before);
+		expect(noticeLog).toEqual([
+			'A は採点のあとに変わっているので、取り消しませんでした（その変更を消さないため）',
+		]);
+		expect(actions.canUndoGrade()).toBe(false);
+	});
+
+	it('採点のあとに復習対象から外していたら、取り消さない', async () => {
+		await actions.grade(A, 'good');
+		actions.viewsRefreshing();
+		await actions.unenroll(A);
+		actions.viewsRefreshing();
+		expect(await actions.undoLastGrade()).toBe(false);
+		expect(vault.fm(A)['study-deck']).toBeUndefined();
+	});
+
+	it('処理中なら取り消さずに知らせ、あとで取り消せるように残す', async () => {
+		await actions.grade(A, 'good');
+		// 描き直しの前（settling）は処理中
+		noticeLog.length = 0;
+		expect(await actions.undoLastGrade()).toBe(false);
+		expect(noticeLog).toEqual([
+			'A は採点などの処理中なので、取り消しませんでした。少し待ってからもう一度実行してください',
+		]);
+		expect(actions.canUndoGrade()).toBe(true);
+		actions.viewsRefreshing();
+		expect(await actions.undoLastGrade()).toBe(true);
+	});
+
+	it('保存に失敗したら知らせ、取り消せる対象に残す', async () => {
+		await actions.grade(A, 'good');
+		actions.viewsRefreshing();
+		vault.failSave = true;
+		noticeLog.length = 0;
+		expect(await actions.undoLastGrade()).toBe(false);
+		expect(noticeLog).toEqual(['採点の取り消しに失敗しました：保存できません']);
+		expect(actions.canUndoGrade()).toBe(true);
+	});
+
+	it('採点に失敗したら、取り消せる採点は変わらない', async () => {
+		await actions.grade(A, 'good');
+		actions.viewsRefreshing();
+		vault.failSave = true;
+		await actions.grade(B, 'good');
+		actions.viewsRefreshing();
+		vault.failSave = false;
+		await actions.undoLastGrade();
+		expect(vault.fm(A)).toEqual(enrolled());
+	});
+});
+
 describe('StudyActions.postpone', () => {
 	it('採点の処理中は送らない（採点で決めた次回日を上書きしない）', async () => {
 		const g = gate();

@@ -173,6 +173,16 @@ export default class StudyCurvePlugin extends Plugin {
 		}
 
 		this.addCommand({
+			id: 'undo-last-grade',
+			name: '直前の採点を取り消す',
+			checkCallback: (checking) => {
+				if (!this.actions.canUndoGrade()) return false;
+				if (!checking) void this.actions.undoLastGrade();
+				return true;
+			},
+		});
+
+		this.addCommand({
 			id: 'toggle-suspend-current-note',
 			name: 'このノートの復習を休止／再開',
 			checkCallback: (checking) => {

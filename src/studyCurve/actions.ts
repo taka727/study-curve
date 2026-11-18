@@ -18,23 +18,37 @@ import {
 	studyNoteFromFrontmatter,
 	studyStateKey,
 } from './studyIndex';
+import { messageWithAction } from './noticeAction';
 import {
 	GradeResult,
+	GradeUndo,
 	OnWritten,
 	PostponeInSprintError,
+	UndoConflictError,
 	enrollNote,
+	gradeFields,
 	gradeNote,
 	postponeNote,
 	renameDeckInNote,
+	undoGradeNote,
 	unenrollNote,
 } from './studyMutator';
-import { DeckConfig, Grade, StudyNote } from './types';
+import { DeckConfig, GRADE_LABELS, Grade, StudyNote } from './types';
 
 // 新しく足す UI の文言（#15 の多言語化で移しやすいように先頭にまとめる）
 const TEXT = {
 	graded: (name: string, date: string, clamped: boolean) =>
 		`${name}：次回 ${date}${clamped ? '（試験日に合わせて前倒し）' : ''}`,
 	gradeFailed: (reason: string) => `復習の記録に失敗しました：${reason}`,
+	// 採点の取り消し（#5）
+	undoButton: '取り消す',
+	undone: (name: string, grade: string) => `${name} の採点（${grade}）を取り消しました`,
+	nothingToUndo: '取り消せる採点はありません',
+	undoConflict: (name: string) =>
+		`${name} は採点のあとに変わっているので、取り消しませんでした（その変更を消さないため）`,
+	undoBusy: (name: string) =>
+		`${name} は採点などの処理中なので、取り消しませんでした。少し待ってからもう一度実行してください`,
+	undoFailed: (reason: string) => `採点の取り消しに失敗しました：${reason}`,
 	bodyFailed: (name: string, reason: string) =>
 		`${name}：復習は記録しましたが、チェックを外せませんでした：${reason}`,
 	postponed: (name: string, date: string) => `${name} を ${date} に送りました`,
@@ -141,6 +155,9 @@ const LONG_NOTICE_MS = 10_000;
  */
 export const WRITTEN_STATE_TTL_MS = 30_000;
 
+/** 採点の通知を出しておく時間。「取り消す」ボタンを押せるように、既定（数秒）より長くする（#5） */
+const UNDO_NOTICE_MS = 8_000;
+
 /**
  * updateDeck の結果。missing：対象のデッキが設定になかった（同期で読み直された、ほかで削除された）／
  * busy：ほかのまとめての処理の最中で、名前の変更（ノートの書き換え）を始められない。設定も変えていない／
@@ -205,6 +222,12 @@ export class StudyActions {
 	 * 処理中の状態はボードではなくここに持つ
 	 */
 	private bulkRunning = false;
+
+	/**
+	 * 直前の採点（#5）。取り消すと null。Obsidian を閉じると消える（取り消せるのは、この起動の間の直前の1回だけ）。
+	 * 次に採点すると、その採点に置き換わる
+	 */
+	private lastGrade: { filePath: string; grade: Grade; undo: GradeUndo } | null = null;
 
 	constructor(private readonly plugin: StudyCurvePlugin) {}
 
@@ -308,6 +331,7 @@ export class StudyActions {
 	async grade(filePath: string, grade: Grade): Promise<GradeResult | null> {
 		const { settings } = this.plugin;
 		try {
+			let undo: GradeUndo | null = null;
 			const result = await this.exclusive(filePath, (onWritten) =>
 				gradeNote(
 					this.plugin.app,
@@ -322,12 +346,21 @@ export class StudyActions {
 								? settings.checkSectionHeading
 								: null,
 					},
-					onWritten,
+					(before, after) => {
+						undo = { before: gradeFields(before), after: gradeFields(after) };
+						onWritten(before, after);
+					},
 				),
 			);
 			if (result) {
+				if (undo !== null) this.lastGrade = { filePath, grade, undo };
 				new Notice(
-					TEXT.graded(basenameOf(filePath), formatShort(result.nextDate), result.clampedByExam),
+					messageWithAction(
+						TEXT.graded(basenameOf(filePath), formatShort(result.nextDate), result.clampedByExam),
+						TEXT.undoButton,
+						() => void this.undoLastGrade(),
+					),
+					UNDO_NOTICE_MS,
 				);
 				if (result.bodyError) {
 					new Notice(TEXT.bodyFailed(basenameOf(filePath), result.bodyError.message));
@@ -337,6 +370,46 @@ export class StudyActions {
 		} catch (error) {
 			new Notice(TEXT.gradeFailed(errorMessage(error)));
 			return null;
+		}
+	}
+
+	/** 取り消せる採点があるか。コマンド「直前の採点を取り消す」を出すかに使う */
+	canUndoGrade(): boolean {
+		return this.lastGrade !== null;
+	}
+
+	/**
+	 * 直前の採点を取り消す（#5）。取り消したら true。結果の通知はここで出す。
+	 * 採点のあとにそのノートが変わっていたら（続けて採点した、明日に送ったなど）、取り消さずに知らせ、
+	 * その採点は取り消せる対象から外す。処理中なら取り消さずに知らせ、あとでもう一度実行できるように残す
+	 */
+	async undoLastGrade(): Promise<boolean> {
+		const last = this.lastGrade;
+		if (last === null) {
+			new Notice(TEXT.nothingToUndo);
+			return false;
+		}
+		const name = basenameOf(last.filePath);
+		try {
+			const done = await this.exclusive(last.filePath, async (onWritten) => {
+				await undoGradeNote(this.plugin.app, last.filePath, last.undo, onWritten);
+				return true;
+			});
+			if (done === null) {
+				new Notice(TEXT.undoBusy(name));
+				return false;
+			}
+			if (this.lastGrade === last) this.lastGrade = null;
+			new Notice(TEXT.undone(name, GRADE_LABELS[last.grade]));
+			return true;
+		} catch (error) {
+			if (error instanceof UndoConflictError) {
+				if (this.lastGrade === last) this.lastGrade = null;
+				new Notice(TEXT.undoConflict(name));
+			} else {
+				new Notice(TEXT.undoFailed(errorMessage(error)));
+			}
+			return false;
 		}
 	}
 
