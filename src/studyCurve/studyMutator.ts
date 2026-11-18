@@ -1,6 +1,6 @@
 import { App, TFile } from 'obsidian';
 import { clearChecksInSection } from './checkboxes';
-import { isISODate, todayISO } from './dateUtils';
+import { todayISO } from './dateUtils';
 import { ScheduleResult, initialNextDate, postponeTarget, scheduleReview } from './schedule';
 import {
 	FM_DECK,
@@ -9,6 +9,7 @@ import {
 	FM_STAGE,
 	FM_SUSPENDED,
 	formatHistoryEntry,
+	parseNextDate,
 	parseStage,
 } from './studyIndex';
 import { Grade } from './types';
@@ -379,8 +380,7 @@ export function applyPostpone(
 	}
 	const deck = deckRaw.trim();
 	if (inSprint(deck)) throw new PostponeInSprintError(deck);
-	const current: unknown = fm[FM_NEXT];
-	const next = postponeTarget(isISODate(current) ? current : null, today);
+	const next = postponeTarget(parseNextDate(fm[FM_NEXT]), today);
 	fm[FM_NEXT] = next;
 	return next;
 }

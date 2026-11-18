@@ -35,11 +35,35 @@ export function formatHistoryEntry(entry: ReviewLogEntry): string {
 }
 
 /**
- * frontmatter の study-stage を読む。数値でなければ 0。
- * 文字列の "3" などへの対応は #32（P3）で行う。今は readStudyNote と同じ挙動に揃えるだけ。
+ * frontmatter の study-stage を読む。読めなければ 0。
+ * プロパティ画面の型の設定によっては文字列で保存されるので、"3" のような数字の文字列も読む（#9）。
  */
 export function parseStage(raw: unknown): number {
-	return typeof raw === 'number' && Number.isFinite(raw) ? Math.max(Math.trunc(raw), 0) : 0;
+	let value: number | null = null;
+	if (typeof raw === 'number') value = raw;
+	else if (typeof raw === 'string' && /^[+-]?\d+(?:\.\d+)?$/.test(raw.trim())) value = Number(raw.trim());
+	return value !== null && Number.isFinite(value) ? Math.max(Math.trunc(value), 0) : 0;
+}
+
+/**
+ * frontmatter の study-next を読む。読めなければ null。
+ * "2026-09-26T10:00" や "2026-09-26 10:00" のように時刻が付いていても、日付の部分を読む（#9）。
+ */
+export function parseNextDate(raw: unknown): string | null {
+	if (typeof raw !== 'string') return null;
+	const value = raw.trim();
+	if (isISODate(value)) return value;
+	const match = /^(\d{4}-\d{2}-\d{2})[T ]\d{1,2}:\d{2}/.exec(value);
+	return match ? match[1]! : null;
+}
+
+/**
+ * frontmatter の study-suspended を読む。
+ * 真偽値の true のほか、文字列で保存された "true"（大文字小文字は問わない）も休止として扱う（#9）。
+ */
+export function parseSuspended(raw: unknown): boolean {
+	if (raw === true) return true;
+	return typeof raw === 'string' && raw.trim().toLowerCase() === 'true';
 }
 
 function parseHistory(raw: unknown): ReviewLogEntry[] {
@@ -71,16 +95,14 @@ export function studyNoteFromFrontmatter(
 	const deckRaw: unknown = fm[FM_DECK];
 	if (typeof deckRaw !== 'string' || deckRaw.trim() === '') return null;
 
-	const nextRaw: unknown = fm[FM_NEXT];
-
 	return {
 		filePath,
 		basename,
 		deck: deckRaw.trim(),
 		stage: parseStage(fm[FM_STAGE]),
-		nextDate: isISODate(nextRaw) ? nextRaw : null,
+		nextDate: parseNextDate(fm[FM_NEXT]),
 		history: parseHistory(fm[FM_HISTORY]),
-		suspended: fm[FM_SUSPENDED] === true,
+		suspended: parseSuspended(fm[FM_SUSPENDED]),
 	};
 }
 

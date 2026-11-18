@@ -177,6 +177,8 @@ study-suspended: true    # （任意）復習を一時休止する
 | `study-history` | 文字列のリスト | 採点の記録（直近20件）。`ok`＝◯、`hard`＝△、`ng`＝✗、`new`＝☆ | 採点 |
 | `study-suspended` | 真偽値（省略可） | 休止中。今日の復習に出ない | 休止／再開 |
 
+プロパティ画面で型を「テキスト」にしたときなど、文字列で保存された値も読む。`study-stage: "3"` はステージ 3、`study-suspended: "true"` は休止、時刻付きの `study-next`（`2026-09-26T10:00`）はその日付として扱う。採点で `study-stage` と `study-next` を、「明日に送る」で `study-next` を、休止と再開で `study-suspended` を、上の形で書き直す。
+
 復習対象から外すと、この5つのキーをすべて消す（ほかのキーには触れない）。
 
 ## モバイル

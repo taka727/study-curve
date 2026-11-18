@@ -13,14 +13,33 @@ describe('parseStage', () => {
 		expect(parseStage(-1)).toBe(0);
 	});
 
-	it('数値でなければ 0（文字列の "3" への対応は #32 で行う）', () => {
-		expect(parseStage('3')).toBe(0);
+	it('数字の文字列も読む（プロパティ画面の型の設定で文字列になったとき）', () => {
+		expect(parseStage('3')).toBe(3);
+		expect(parseStage(' 4 ')).toBe(4);
+		expect(parseStage('2.7')).toBe(2);
+		expect(parseStage('-1')).toBe(0);
+	});
+
+	it('数値にも数字の文字列にも読めなければ 0', () => {
 		expect(parseStage(undefined)).toBe(0);
 		expect(parseStage(NaN)).toBe(0);
+		expect(parseStage('')).toBe(0);
+		expect(parseStage('three')).toBe(0);
+		expect(parseStage('3日')).toBe(0);
+		expect(parseStage('0x10')).toBe(0);
+		expect(parseStage('1e2')).toBe(0);
+		expect(parseStage(true)).toBe(0);
 	});
 });
 
 describe('applyGrade', () => {
+	it('study-stage が文字列の "2" でもステージ 2 として進め、数値で書き戻す', () => {
+		const fm: Record<string, unknown> = { 'study-deck': 'A', 'study-stage': '2' };
+		const result = applyGrade(fm, 'good', TODAY, DEFAULT_INTERVALS, noExam);
+		expect(result.stage).toBe(3);
+		expect(fm['study-stage']).toBe(3);
+	});
+
 	it('good でステージを1つ進め、次回日と履歴を書く', () => {
 		const fm: Record<string, unknown> = {
 			'study-deck': 'A',
