@@ -113,7 +113,8 @@ describe('loadSettingsData（整える処理）', () => {
 	});
 
 	it('P1 の時点の形は、version 以外が保存値のまま', () => {
-		expect(loadSettingsData(P1_SAVED).settings).toEqual({ ...P1_SAVED, version: 1 });
+		// P1 の保存値にない項目（#12 の showStatusBar）は既定値で補う
+		expect(loadSettingsData(P1_SAVED).settings).toEqual({ ...P1_SAVED, version: 1, showStatusBar: true });
 	});
 
 	it('13. 整数の項目は、その項目だけ既定値に戻す', () => {
@@ -134,6 +135,14 @@ describe('loadSettingsData（整える処理）', () => {
 
 	it('15. 真偽値でなければ既定値', () => {
 		expect(loadSettingsData({ autoAdvance: 'yes' }).settings.autoAdvance).toBe(true);
+	});
+
+	it('15b. ステータスバーの表示（#12）は、保存がなければ ON、真偽値でなければ既定値', () => {
+		expect(loadSettingsData({}).settings.showStatusBar).toBe(true);
+		expect(loadSettingsData({ showStatusBar: false }).settings.showStatusBar).toBe(false);
+		const broken = loadSettingsData({ showStatusBar: 'no' });
+		expect(broken.settings.showStatusBar).toBe(true);
+		expect(broken.resetKeys).toEqual(['showStatusBar']);
 	});
 
 	it('16. decks が配列でなければ空の配列', () => {

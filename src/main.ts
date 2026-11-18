@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile, normalizePath } from 'obsidian';
+import { Notice, Platform, Plugin, TAbstractFile, TFile, normalizePath } from 'obsidian';
 import {
 	StudyCurveSettingTab,
 	StudyCurveSettings,
@@ -24,7 +24,7 @@ import { buildQueue } from './studyCurve/reviewQueue';
 import { TextInputModal } from './studyCurve/TextInputModal';
 import { buildUnenrollConfirm } from './studyCurve/unenrollConfirm';
 import { parseIntervals } from './studyCurve/schedule';
-import { StudyIndex, buildStudyIndex } from './studyCurve/studyCache';
+import { StudyIndex, StudyIndexStore, readIndexedNote } from './studyCurve/studyCache';
 import {
 	allDeckNames,
 	findDeck,
@@ -59,6 +59,12 @@ const TEXT = {
 		'Study Curve：設定を読み直していたため、今の変更は保存しませんでした。もう一度変えてください。',
 	unreadable:
 		'Study Curve：設定ファイル（data.json）を読み込めなかったため、既定の設定で動いています。設定を変えると、ファイルは書き直されます。',
+	// ステータスバー（#12）
+	statusBar: (count: number) => `復習 ${count}`,
+	statusBarTooltip: (count: number) =>
+		count === 0
+			? '今日の復習はありません（クリックで復習ボードを開く）'
+			: `今日の復習 ${count} 件（クリックで復習ボードを開く）`,
 };
 
 /** 設定の版や読み込みの問題を知らせる通知の表示時間 */
@@ -72,9 +78,12 @@ export default class StudyCurvePlugin extends Plugin {
 
 	// Vault 全体の走査結果はプラグインで1つだけ持ち、ボードと各ブロックで使い回す。
 	// 端末が非力でも、開いているブロックの数だけ走査が走ることがないようにするため。
-	private index: StudyIndex | null = null;
+	// ノートが変わったときは、そのノートの分だけ差し替える（#13）。onload で作る
+	private indexStore!: StudyIndexStore;
 	private indexListeners = new Set<() => void>();
 	private notifyTimer: number | null = null;
+	/** ステータスバーの今日の件数（#12）。モバイルにはステータスバーがないので null */
+	private statusBarEl: HTMLElement | null = null;
 
 	/** このプラグインより新しい版の設定を読んだので、保存を止めている（#27） */
 	private settingsSaveBlocked = false;
@@ -87,22 +96,48 @@ export default class StudyCurvePlugin extends Plugin {
 	private readonly settingsLoad = new SettingsLoadSequencer();
 
 	async onload() {
-		await this.loadSettings();
+		// actions とインデックスは、設定の読み込みを待つ前に作る。同期による設定の読み直し
+		// （onExternalSettingsChange）が、最初の読み込みより先に終わって invalidateIndex を呼ぶことがあるため。
+		// どちらも作るだけでは設定を読まない
 		this.actions = new StudyActions(this);
+		this.indexStore = new StudyIndexStore(
+			() => this.app.vault.getMarkdownFiles(),
+			(file) =>
+				readIndexedNote(this.app, file, (path, fromCache) => this.actions.stateFor(path, fromCache)),
+		);
+		await this.loadSettings();
 
-		// メタデータやファイルが動いたらインデックスを捨てる。
-		// 作り直しは次に必要になったときまで遅延させる。
-		// 採点などで書き込んだ直後のノートは、作り直しのときに actions.stateFor が
+		// メタデータやファイルが動いたら、そのファイルの分だけインデックスを差し替え、
+		// 中身が変わったときだけ描き直す（#13）。登録していないノートの編集や、本文だけの編集では
+		// 描き直さない。インデックスをまだ作っていなければ、次に必要になったときに全体から作る。
+		// 採点などで書き込んだ直後のノートは、差し替えのときに actions.stateFor が
 		// キャッシュの中身と書き込んだ状態を比べて、反映されたかを判断する。
 		this.registerEvent(
-			this.app.metadataCache.on('changed', () => this.invalidateIndex()),
+			this.app.metadataCache.on('changed', (file) => this.onIndexedFileChanged(file)),
 		);
 		this.registerEvent(
-			this.app.metadataCache.on('deleted', () => this.invalidateIndex()),
+			this.app.metadataCache.on('deleted', (file) => this.onIndexedFileRemoved(file)),
 		);
-		this.registerEvent(this.app.vault.on('create', () => this.invalidateIndex()));
-		this.registerEvent(this.app.vault.on('delete', () => this.invalidateIndex()));
-		this.registerEvent(this.app.vault.on('rename', () => this.invalidateIndex()));
+		// 起動時の読み込みでは、既存のファイルごとに create が届く。インデックスは全体から作るので、
+		// 起動を終えてからのファイルの作成だけを受け取る。起動の途中でインデックスを作っていたら
+		// まだ読み込んでいないファイルが抜けているので、起動を終えたときに全体から作り直す
+		this.app.workspace.onLayoutReady(() => {
+			this.invalidateIndex();
+			this.registerEvent(this.app.vault.on('create', (file) => this.onIndexedFileChanged(file)));
+		});
+		this.registerEvent(this.app.vault.on('delete', (file) => this.onIndexedFileRemoved(file)));
+		this.registerEvent(
+			this.app.vault.on('rename', (file, oldPath) => {
+				if (!(file instanceof TFile)) {
+					// フォルダの移動は中のファイルをまとめて動かすので、全体から作り直す
+					this.invalidateIndex();
+				} else {
+					this.refreshIf(this.indexStore.rename(file, oldPath));
+				}
+			}),
+		);
+
+		this.setUpStatusBar();
 
 		this.registerView(
 			VIEW_TYPE_STUDY_BOARD,
@@ -233,13 +268,67 @@ export default class StudyCurvePlugin extends Plugin {
 		this.indexListeners.clear();
 	}
 
-	getIndex(): StudyIndex {
-		if (this.index === null) {
-			this.index = buildStudyIndex(this.app, (path, fromCache) =>
-				this.actions.stateFor(path, fromCache),
-			);
+	/**
+	 * ステータスバーに今日の復習の件数を出す（#12）。デスクトップのみ。
+	 * ボードやブロックと同じく、インデックスが変わったとき・日付が変わったとき・設定を保存したときに描き直す。
+	 * 最初は、起動を終えたときの描き直し（onLayoutReady の invalidateIndex）で出る
+	 */
+	private setUpStatusBar(): void {
+		if (!Platform.isDesktop) return;
+		const el = this.addStatusBarItem();
+		el.addClass('mod-clickable');
+		// キーボードでもたどり着いて開けるように、ボタンとして扱う（ボードの開閉の見出しと同じ）
+		el.setAttr('role', 'button');
+		el.setAttr('tabindex', '0');
+		el.hide();
+		this.registerDomEvent(el, 'click', () => {
+			void this.activateBoard();
+		});
+		this.registerDomEvent(el, 'keydown', (event) => {
+			if (event.key === 'Enter' || event.key === ' ') {
+				event.preventDefault();
+				void this.activateBoard();
+			}
+		});
+		this.statusBarEl = el;
+		this.register(this.onIndexChange(() => this.renderStatusBar()));
+	}
+
+	private renderStatusBar(): void {
+		const el = this.statusBarEl;
+		if (el === null) return;
+		if (!this.settings.showStatusBar) {
+			// 出さないときは、Vault を読まない
+			el.hide();
+			return;
 		}
-		return this.index;
+		const count = this.getDueQueue().length;
+		el.setText(TEXT.statusBar(count));
+		el.setAttr('aria-label', TEXT.statusBarTooltip(count));
+		el.setAttr('data-tooltip-position', 'top');
+		el.show();
+	}
+
+	getIndex(): StudyIndex {
+		return this.indexStore.get();
+	}
+
+	private onIndexedFileChanged(file: TAbstractFile): void {
+		if (file instanceof TFile && isMarkdown(file)) this.refreshIf(this.indexStore.update(file));
+	}
+
+	private onIndexedFileRemoved(file: TAbstractFile): void {
+		if (file instanceof TFile) {
+			if (isMarkdown(file)) this.refreshIf(this.indexStore.remove(file.path));
+		} else {
+			// フォルダを消した。中のファイルの通知に頼らず、全体から作り直す
+			this.invalidateIndex();
+		}
+	}
+
+	/** インデックスの中身が変わったときだけ描き直す */
+	private refreshIf(changed: boolean): void {
+		if (changed) this.refreshViews();
 	}
 
 	// ビューとブロックはこれで更新通知を受け取る。個々に vault / metadataCache を
@@ -255,7 +344,7 @@ export default class StudyCurvePlugin extends Plugin {
 	 * 採点などの書き込みのあとに actions も呼ぶ。
 	 */
 	invalidateIndex(): void {
-		this.index = null;
+		this.indexStore.invalidate();
 		this.refreshViews();
 	}
 
@@ -519,4 +608,9 @@ export default class StudyCurvePlugin extends Plugin {
 		// 保存を止めている間も、変更はこの起動の間は効く（操作が途中で失敗したように見せない）
 		this.invalidateIndex();
 	}
+}
+
+/** インデックスに入れるファイル（Vault.getMarkdownFiles と同じく、拡張子が md のもの） */
+function isMarkdown(file: TFile): boolean {
+	return file.extension === 'md';
 }
