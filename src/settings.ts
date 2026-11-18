@@ -474,11 +474,11 @@ export class StudyCurveSettingTab extends PluginSettingTab {
 	 * 空でない配列を返すので呼ばれない（minAppVersion が 1.7.2 なので残す）
 	 */
 	display(): void {
+		this.shown = true;
 		this.renderLegacy();
 	}
 
 	private renderLegacy(): void {
-		this.shown = true;
 		const { containerEl } = this;
 		containerEl.empty();
 

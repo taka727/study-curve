@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SettingDefinitionItem } from 'obsidian';
 import type StudyCurvePlugin from '../src/main';
 import { DEFAULT_SETTINGS, StudyCurveSettingTab, StudyCurveSettings } from '../src/settings';
+import { stubApiVersion } from './obsidian-stub';
 
 // Obsidian 1.13 以上の設定画面と設定の検索に使う定義（#1）
 
@@ -76,5 +77,46 @@ describe('StudyCurveSettingTab.getSettingDefinitions', () => {
 		});
 		tab.getSettingDefinitions();
 		expect(getIndex).not.toHaveBeenCalled();
+	});
+});
+
+describe('StudyCurveSettingTab.refreshIfShown', () => {
+	/** 古い版の描き方（renderLegacy）と、1.13 以上の描き直し（update）を差し替えて、呼ばれた回数を数える */
+	function spiedTab() {
+		const { tab } = tabWith({ ...DEFAULT_SETTINGS, decks: [] });
+		const renderLegacy = vi
+			.spyOn(tab as unknown as { renderLegacy(): void }, 'renderLegacy')
+			.mockImplementation(() => {});
+		const update = vi.fn();
+		tab.update = update;
+		return { tab, renderLegacy, update };
+	}
+
+	afterEach(() => {
+		stubApiVersion.current = '1.12.0';
+	});
+
+	it('1.13 以上では update で描き直す（display を呼び直しても描き直されないため）', () => {
+		stubApiVersion.current = '1.13.0';
+		const { tab, renderLegacy, update } = spiedTab();
+		tab.refreshIfShown();
+		expect(update).toHaveBeenCalledTimes(1);
+		expect(renderLegacy).not.toHaveBeenCalled();
+	});
+
+	it('1.13 より古い版では、開いているときだけ今までどおり描き直す', () => {
+		const { tab, renderLegacy, update } = spiedTab();
+		tab.refreshIfShown();
+		expect(renderLegacy).not.toHaveBeenCalled();
+
+		tab.display();
+		expect(renderLegacy).toHaveBeenCalledTimes(1);
+		tab.refreshIfShown();
+		expect(renderLegacy).toHaveBeenCalledTimes(2);
+
+		tab.hide();
+		tab.refreshIfShown();
+		expect(renderLegacy).toHaveBeenCalledTimes(2);
+		expect(update).not.toHaveBeenCalled();
 	});
 });

@@ -29,10 +29,21 @@ export function normalizePath(path: string): string {
 }
 
 // settings.ts（mergeSettings のテスト）が import するクラス。中身は使わない
-export class PluginSettingTab {}
-/** テストでは Obsidian 1.13 より古い版として振る舞う（設定画面の描き直しは display の経路） */
-export function requireApiVersion(_version: string): boolean {
-	return false;
+export class PluginSettingTab {
+	hide(): void {}
+}
+
+/** requireApiVersion が比べる、動いている Obsidian の版。既定は 1.13 より古い版。テストごとに変えてよい */
+export const stubApiVersion = { current: '1.12.0' };
+
+export function requireApiVersion(version: string): boolean {
+	const have = stubApiVersion.current.split('.').map(Number);
+	const need = version.split('.').map(Number);
+	for (let i = 0; i < Math.max(have.length, need.length); i++) {
+		const diff = (have[i] ?? 0) - (need[i] ?? 0);
+		if (diff !== 0) return diff > 0;
+	}
+	return true;
 }
 export class Setting {}
 // settings.ts が import するデッキ作成ダイアログ（DeckEditModal、FolderSuggest）が継承するクラス
