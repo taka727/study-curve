@@ -1,6 +1,5 @@
 import { App, TFile } from 'obsidian';
 import { clearChecksInSection } from './checkboxes';
-import { insertSelfCheckSection } from './selfCheck';
 import { isISODate, todayISO } from './dateUtils';
 import { ScheduleResult, initialNextDate, postponeTarget, scheduleReview } from './schedule';
 import {
@@ -13,6 +12,7 @@ import {
 	parseStage,
 } from './studyIndex';
 import { Grade } from './types';
+import { insertSelfCheckSection } from './selfCheck';
 
 export const HISTORY_LIMIT = 20;
 

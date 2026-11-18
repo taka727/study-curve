@@ -45,6 +45,11 @@ const TEXT = {
 	titleRequired: 'タイトルを入力してください',
 	createNoteFailed: (reason: string) => `復習ノートの作成に失敗しました：${reason}`,
 	openNoteFailed: (name: string, reason: string) => `「${name}」を開けませんでした：${reason}`,
+	// 自己チェック欄の差し込み（#2）
+	insertSelfCheck: 'このノートに自己チェック欄を追加',
+	selfCheckInserted: (name: string) => `${name} に「思い出せるか」の欄と判定表を追加しました`,
+	selfCheckExists: (name: string) => `${name} にはもう「思い出せるか」の欄があります`,
+	selfCheckFailed: (reason: string) => `自己チェック欄の追加に失敗しました：${reason}`,
 	// 設定の読み込みと保存（#27）。起動時にどのプラグインの通知かが分かるように、名前から始める
 	newerVersion:
 		'Study Curve：設定がこの版より新しい形で保存されています。プラグインを更新してください。それまでは設定を変えても保存しません。',
@@ -54,11 +59,6 @@ const TEXT = {
 		'Study Curve：設定を読み直していたため、今の変更は保存しませんでした。もう一度変えてください。',
 	unreadable:
 		'Study Curve：設定ファイル（data.json）を読み込めなかったため、既定の設定で動いています。設定を変えると、ファイルは書き直されます。',
-	// 自己チェック欄の差し込み（#2）
-	insertSelfCheck: 'このノートに自己チェック欄を追加',
-	selfCheckInserted: (name: string) => `${name} に「思い出せるか」の欄と判定表を追加しました`,
-	selfCheckExists: (name: string) => `${name} にはもう「思い出せるか」の欄があります`,
-	selfCheckFailed: (reason: string) => `自己チェック欄の追加に失敗しました：${reason}`,
 };
 
 /** 設定の版や読み込みの問題を知らせる通知の表示時間 */
