@@ -132,7 +132,7 @@ No hotkeys are assigned by default. Assigning hotkeys to ☆ ◯ △ ✗ lets yo
 | 今日の復習を始める（最初のノートを開く） | Start today's reviews (open the first note) | Opens the first note in today's reviews |
 | このノートを復習対象に登録 | Enroll this note | Picks the deck from the note's folder, or asks you to choose one (a new name is also added to the settings) |
 | 復習ノートを作成 | Create review note | Asks for a deck and a title, creates the note, enrolls it and opens it |
-| このノートに自己チェック欄を追加 | Add self-check section to this note | Adds the empty "思い出せるか" (can you recall it?) section and the grading table after the frontmatter and the `# title`, with `---` before the rest of the note. Does nothing if the note already has a heading containing "思い出せるか" |
+| このノートに自己チェック欄を追加 | Add self-check section to this note | Adds the empty "思い出せるか" (can you recall it?) section and the grading table after the frontmatter and the `# title`, with `---` and a "🎯 答え合わせ" (answer) heading before the rest of the note, so clearing checks after grading only touches the new section. Does nothing if the note already has a heading containing "思い出せるか" |
 | このノートを復習対象から外す | Unenroll this note | After confirmation, removes `study-*` from the frontmatter |
 | 復習を記録: ◯ 覚えてた / △ あいまい / ✗ 忘れた / ☆ 初見 | Record review: Remembered / Unsure / Forgot / New | Grades the open note |
 | このノートの復習を休止／再開 | Suspend / resume this note | Toggles `study-suspended` |

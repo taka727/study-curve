@@ -1,13 +1,12 @@
 // 既存のノートに「思い出せるか」の空欄と判定表を差し込む（#2）。
 // Obsidian に依存しない純粋な関数だけを置き、ユニットテストで固める。
-import { Line, frontmatterLength, splitLines } from './checkboxes';
-import { SELF_CHECK_KEYWORD, SELF_CHECK_SECTION } from './noteFile';
+import { CODE_FENCE_CLOSE, CODE_FENCE_OPEN, Line, frontmatterLength, splitLines } from './checkboxes';
+import { ANSWER_HEADING, SELF_CHECK_KEYWORD, SELF_CHECK_SECTION } from './noteFile';
 
 const BLANK = /^[ \t]*$/;
 // # の後に空白か行末が必要（#タグ は見出しではない）。4文字以上の字下げは見出しではない
 const ATX_HEADING = /^ {0,3}(#{1,6})(?=[ \t]|$)(.*)$/;
 const H1 = /^ {0,3}#(?=[ \t]|$)/;
-const CODE_FENCE = /^[ \t]*(`{3,}|~{3,})/;
 
 /**
  * 見出しに keyword を含むものがあるか。frontmatter とコードブロック（``` と ~~~）の中は見ない。
@@ -19,13 +18,16 @@ export function hasHeadingContaining(content: string, keyword: string): boolean 
 	let fence: string | null = null;
 	for (let i = frontmatterLength(lines); i < lines.length; i++) {
 		const text = lines[i]!.text;
-		const marker = CODE_FENCE.exec(text)?.[1];
 		if (fence !== null) {
-			if (marker !== undefined && marker[0] === fence[0] && marker.length >= fence.length) fence = null;
+			// 閉じは、開きと同じ記号で長さが開き以上、その後は空白だけの行（clearChecksInSection と同じ）
+			const close = CODE_FENCE_CLOSE.exec(text)?.[1];
+			if (close !== undefined && close[0] === fence[0] && close.length >= fence.length) fence = null;
 			continue;
 		}
-		if (marker !== undefined) {
-			fence = marker;
+		// バッククォートの開きの情報文字列にバッククォートがあれば、開きではない
+		const open = CODE_FENCE_OPEN.exec(text);
+		if (open !== null && !(open[1]![0] === '`' && open[2]!.includes('`'))) {
+			fence = open[1]!;
 			continue;
 		}
 		const heading = ATX_HEADING.exec(text);
@@ -38,7 +40,9 @@ export function hasHeadingContaining(content: string, keyword: string): boolean 
  * 「思い出せるか」の空欄と判定表を差し込んだ本文を返す。もう欄があれば null（何もしない）。
  *
  * - 差し込む場所：frontmatter の後。本文が `# タイトル` で始まるなら、その行の後
- * - 差し込んだ欄と元の本文のあいだに `---` を入れる（元の本文が答え合わせになる）。元の本文が空なら入れない
+ * - 差し込んだ欄と元の本文のあいだに `---` と答え合わせの見出しを入れる（元の本文が答え合わせになる）。
+ *   見出しで欄を閉じるので、採点時にチェックを外すのは欄の中だけで、元の本文のチェックは残る。
+ *   元の本文が空なら入れない
  * - 改行コードは、ファイルの最初の改行にそろえる（なければ LF）。元の行の改行コードは変えない
  */
 export function insertSelfCheckSection(content: string): string | null {
@@ -62,7 +66,7 @@ export function insertSelfCheckSection(content: string): string | null {
 	// タイトルの後なら、タイトルと欄のあいだに空行を1つ
 	if (insertAt > 0 && insertAt === first + 1) parts.push(eol);
 	parts.push(section);
-	if (rest !== '') parts.push(eol, '---', eol, eol, rest);
+	if (rest !== '') parts.push(eol, '---', eol, eol, ANSWER_HEADING, eol, eol, rest);
 	return parts.join('');
 }
 

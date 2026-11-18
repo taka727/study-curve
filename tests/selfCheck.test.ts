@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { TFile } from 'obsidian';
-import { SELF_CHECK_SECTION } from '../src/studyCurve/noteFile';
+import { clearChecksInSection } from '../src/studyCurve/checkboxes';
+import { ANSWER_HEADING, SELF_CHECK_SECTION } from '../src/studyCurve/noteFile';
 import { hasHeadingContaining, insertSelfCheckSection } from '../src/studyCurve/selfCheck';
 import { insertSelfCheck } from '../src/studyCurve/studyMutator';
 
 // 既存のノートに「思い出せるか」の空欄と判定表を差し込む（#2）
 
 const S = SELF_CHECK_SECTION;
+const A = ANSWER_HEADING;
 
 describe('hasHeadingContaining', () => {
 	it('見出しに語を含めば true', () => {
@@ -22,6 +24,15 @@ describe('hasHeadingContaining', () => {
 		expect(hasHeadingContaining('#思い出せるか\n', '思い出せるか')).toBe(false);
 	});
 
+	it('閉じの記号の後に文字がある行では、コードブロックは閉じない', () => {
+		expect(hasHeadingContaining('~~~\n~~~example\n## 思い出せるか\n~~~\n', '思い出せるか')).toBe(false);
+		expect(hasHeadingContaining('```\n```js\n## 思い出せるか\n```\n', '思い出せるか')).toBe(false);
+	});
+
+	it('情報文字列にバッククォートを含む行は、コードブロックの開きではない', () => {
+		expect(hasHeadingContaining('``` a`b\n## 思い出せるか\n', '思い出せるか')).toBe(true);
+	});
+
 	it('コードブロックの後の見出しは見る', () => {
 		expect(hasHeadingContaining('```\nx\n```\n## 思い出せるか\n', '思い出せるか')).toBe(true);
 	});
@@ -32,29 +43,29 @@ describe('hasHeadingContaining', () => {
 });
 
 describe('insertSelfCheckSection', () => {
-	it('frontmatter とタイトルの後に差し込み、元の本文とのあいだに --- を入れる', () => {
+	it('frontmatter とタイトルの後に差し込み、元の本文とのあいだに --- と答え合わせの見出しを入れる', () => {
 		const content = '---\nstudy-deck: A\n---\n# IAM\n\n本文\n';
 		expect(insertSelfCheckSection(content)).toBe(
-			`---\nstudy-deck: A\n---\n# IAM\n\n${S}\n---\n\n本文\n`,
+			`---\nstudy-deck: A\n---\n# IAM\n\n${S}\n---\n\n${A}\n\n本文\n`,
 		);
 	});
 
 	it('タイトルがなければ frontmatter の直後に差し込む', () => {
-		expect(insertSelfCheckSection('---\na: 1\n---\n本文\n')).toBe(`---\na: 1\n---\n${S}\n---\n\n本文\n`);
+		expect(insertSelfCheckSection('---\na: 1\n---\n本文\n')).toBe(`---\na: 1\n---\n${S}\n---\n\n${A}\n\n本文\n`);
 	});
 
 	it('frontmatter もタイトルもなければ先頭に差し込む', () => {
-		expect(insertSelfCheckSection('本文\n')).toBe(`${S}\n---\n\n本文\n`);
+		expect(insertSelfCheckSection('本文\n')).toBe(`${S}\n---\n\n${A}\n\n本文\n`);
 	});
 
 	it('frontmatter の後の空行を飛ばしてタイトルを探す', () => {
 		expect(insertSelfCheckSection('---\na: 1\n---\n\n# T\n本文')).toBe(
-			`---\na: 1\n---\n\n# T\n\n${S}\n---\n\n本文`,
+			`---\na: 1\n---\n\n# T\n\n${S}\n---\n\n${A}\n\n本文`,
 		);
 	});
 
 	it('2段目以下の見出しはタイトルとみなさない', () => {
-		expect(insertSelfCheckSection('## 節\n本文\n')).toBe(`${S}\n---\n\n## 節\n本文\n`);
+		expect(insertSelfCheckSection('## 節\n本文\n')).toBe(`${S}\n---\n\n${A}\n\n## 節\n本文\n`);
 	});
 
 	it('本文がタイトルだけなら、--- を入れない', () => {
@@ -77,10 +88,18 @@ describe('insertSelfCheckSection', () => {
 		expect(insertSelfCheckSection(once!)).toBeNull();
 	});
 
+	it('差し込んだあとに採点でチェックを外しても、元の本文のチェックは残る', () => {
+		const result = insertSelfCheckSection('# T\n\n- [x] 完了した作業\n')!;
+		const withChecks = result.replace('**例1**', '- [x] 例1を思い出せた');
+		const cleared = clearChecksInSection(withChecks, '思い出せるか');
+		expect(cleared).toContain('- [ ] 例1を思い出せた');
+		expect(cleared).toContain('- [x] 完了した作業');
+	});
+
 	it('CRLF のノートには CRLF で差し込み、元の行は変えない', () => {
 		const content = '---\r\na: 1\r\n---\r\n# T\r\n\r\n本文\r\n';
 		const result = insertSelfCheckSection(content)!;
-		expect(result).toBe(`---\r\na: 1\r\n---\r\n# T\r\n\r\n${S.replace(/\n/g, '\r\n')}\r\n---\r\n\r\n本文\r\n`);
+		expect(result).toBe(`---\r\na: 1\r\n---\r\n# T\r\n\r\n${S.replace(/\n/g, '\r\n')}\r\n---\r\n\r\n${A}\r\n\r\n本文\r\n`);
 		expect(result.replace(/\r\n/g, '')).not.toMatch(/\n/);
 	});
 });
@@ -107,7 +126,7 @@ describe('insertSelfCheck', () => {
 	it('欄がなければ差し込んで true', async () => {
 		const { app, state } = fakeApp('# T\n\n本文\n');
 		expect(await insertSelfCheck(app, new TFile())).toBe(true);
-		expect(state.body).toBe(`# T\n\n${S}\n---\n\n本文\n`);
+		expect(state.body).toBe(`# T\n\n${S}\n---\n\n${A}\n\n本文\n`);
 	});
 
 	it('もう欄があれば書き込まずに false', async () => {
@@ -119,7 +138,7 @@ describe('insertSelfCheck', () => {
 	it('読んだあとに欄が足されていたら、本文を変えない', async () => {
 		const added = `# T\n\n## 思い出せるか\n`;
 		const { app, state } = fakeApp('# T\n', () => added);
-		await insertSelfCheck(app, new TFile());
+		expect(await insertSelfCheck(app, new TFile())).toBe(false);
 		expect(state.body).toBe(added);
 		expect(state.writes).toBe(0);
 	});
@@ -127,6 +146,6 @@ describe('insertSelfCheck', () => {
 	it('読んだあとの編集は残して差し込む', async () => {
 		const { app, state } = fakeApp('# T\n\n本文\n', (body) => `${body}追記\n`);
 		await insertSelfCheck(app, new TFile());
-		expect(state.body).toBe(`# T\n\n${S}\n---\n\n本文\n追記\n`);
+		expect(state.body).toBe(`# T\n\n${S}\n---\n\n${A}\n\n本文\n追記\n`);
 	});
 });

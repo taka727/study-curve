@@ -30,6 +30,12 @@ export const SELF_CHECK_SECTION = `## ✅ 思い出せるか（読む前に）
 `;
 
 /**
+ * 答え合わせの見出し。既存のノートに欄を差し込むときは、元の本文の前に置く（#2）。
+ * 「思い出せるか」の欄はこの見出しで終わるので、採点時にチェックを外すのは欄の中だけになる
+ */
+export const ANSWER_HEADING = '## 🎯 答え合わせ — これを覚えていればOK';
+
+/**
  * 内蔵の型。{{title}} などは renderTemplate で置き換える。
  * 見出し「思い出せるか」は、採点時にチェックを外す見出しの既定値（#20 の checkSectionHeading）とそろえる
  */
@@ -38,7 +44,7 @@ export const DEFAULT_NOTE_TEMPLATE = `# {{title}}
 ${SELF_CHECK_SECTION}
 ---
 
-## 🎯 答え合わせ — これを覚えていればOK
+${ANSWER_HEADING}
 
 - **OK**：
 - **なぜ**：
