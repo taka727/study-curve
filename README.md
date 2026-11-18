@@ -204,6 +204,8 @@ study-suspended: true    # (optional) pause reviews
 | `study-history` | list of text | Grades (last 20). `ok` = ◯, `hard` = △, `ng` = ✗, `new` = ☆ | Grading |
 | `study-suspended` | boolean (optional) | Suspended; not shown in today's reviews | Suspending / resuming |
 
+Values saved as text are also read: `study-stage: "3"` as stage 3, `study-suspended: "true"` as suspended, and a `study-next` with a time (`2026-09-26T10:00`) as that date. This can happen when a property's type in the Properties view is set to text. Grading writes `study-stage` and `study-next` back in the form above, postponing writes `study-next`, and suspending or resuming writes `study-suspended`.
+
 Unenrolling removes all five keys and leaves the other keys alone.
 
 ## Mobile
