@@ -1,4 +1,4 @@
-import { Notice, Plugin, TAbstractFile, TFile, normalizePath } from 'obsidian';
+import { Notice, Platform, Plugin, TAbstractFile, TFile, normalizePath } from 'obsidian';
 import {
 	StudyCurveSettingTab,
 	StudyCurveSettings,
@@ -54,6 +54,12 @@ const TEXT = {
 		'Study Curve：設定を読み直していたため、今の変更は保存しませんでした。もう一度変えてください。',
 	unreadable:
 		'Study Curve：設定ファイル（data.json）を読み込めなかったため、既定の設定で動いています。設定を変えると、ファイルは書き直されます。',
+	// ステータスバー（#12）
+	statusBar: (count: number) => `復習 ${count}`,
+	statusBarTooltip: (count: number) =>
+		count === 0
+			? '今日の復習はありません（クリックで復習ボードを開く）'
+			: `今日の復習 ${count} 件（クリックで復習ボードを開く）`,
 };
 
 /** 設定の版や読み込みの問題を知らせる通知の表示時間 */
@@ -71,6 +77,8 @@ export default class StudyCurvePlugin extends Plugin {
 	private indexStore!: StudyIndexStore;
 	private indexListeners = new Set<() => void>();
 	private notifyTimer: number | null = null;
+	/** ステータスバーの今日の件数（#12）。モバイルにはステータスバーがないので null */
+	private statusBarEl: HTMLElement | null = null;
 
 	/** このプラグインより新しい版の設定を読んだので、保存を止めている（#27） */
 	private settingsSaveBlocked = false;
@@ -123,6 +131,8 @@ export default class StudyCurvePlugin extends Plugin {
 				}
 			}),
 		);
+
+		this.setUpStatusBar();
 
 		this.registerView(
 			VIEW_TYPE_STUDY_BOARD,
@@ -240,6 +250,38 @@ export default class StudyCurvePlugin extends Plugin {
 		if (this.notifyTimer !== null) window.clearTimeout(this.notifyTimer);
 		this.actions.dispose();
 		this.indexListeners.clear();
+	}
+
+	/**
+	 * ステータスバーに今日の復習の件数を出す（#12）。デスクトップのみ。
+	 * ボードやブロックと同じく、インデックスが変わったとき・日付が変わったとき・設定を保存したときに描き直す。
+	 * 最初は、起動を終えたときの描き直し（onLayoutReady の invalidateIndex）で出る
+	 */
+	private setUpStatusBar(): void {
+		if (!Platform.isDesktop) return;
+		const el = this.addStatusBarItem();
+		el.addClass('mod-clickable');
+		el.hide();
+		this.registerDomEvent(el, 'click', () => {
+			void this.activateBoard();
+		});
+		this.statusBarEl = el;
+		this.register(this.onIndexChange(() => this.renderStatusBar()));
+	}
+
+	private renderStatusBar(): void {
+		const el = this.statusBarEl;
+		if (el === null) return;
+		if (!this.settings.showStatusBar) {
+			// 出さないときは、Vault を読まない
+			el.hide();
+			return;
+		}
+		const count = this.getDueQueue().length;
+		el.setText(TEXT.statusBar(count));
+		el.setAttr('aria-label', TEXT.statusBarTooltip(count));
+		el.setAttr('data-tooltip-position', 'top');
+		el.show();
 	}
 
 	getIndex(): StudyIndex {
