@@ -182,9 +182,63 @@ describe('StudyIndexStore', () => {
 		target.basename = 'z';
 		states.delete(oldPath);
 		states.set('z.md', note('z.md'));
-		expect(store.remove(oldPath)).toBe(true);
-		expect(store.update(target)).toBe(true);
+		expect(store.rename(target, oldPath)).toBe(true);
 		expect(paths().notes).toEqual(['m.md', 'z.md']);
+		expect(listCalls).toBe(1);
+	});
+
+	it('登録していないノートの移動も、元の場所から除いて新しい場所に入れ直す', () => {
+		// 未登録の一覧は TFile をそのまま持つので、通知の時点で path はもう新しい値になっている
+		const target = file('A/memo.md');
+		put(target, null);
+		put(file('B/x.md'), null);
+		put(file('C/y.md'), null);
+		store.get();
+		target.path = 'C/z.md';
+		target.basename = 'z';
+		expect(store.rename(target, 'A/memo.md')).toBe(true);
+		expect(paths().unenrolled).toEqual(['B/x.md', 'C/y.md', 'C/z.md']);
+		expect(store.get().unenrolled[2]).toBe(target);
+		expect(listCalls).toBe(1);
+	});
+
+	it('md でない拡張子に変えたら除き、md に戻したら入れる', () => {
+		const target = file('memo.md');
+		put(target, null);
+		put(file('b.md'), note('b.md'));
+		store.get();
+		target.path = 'memo.txt';
+		target.extension = 'txt';
+		expect(store.rename(target, 'memo.md')).toBe(true);
+		expect(paths()).toEqual({ notes: ['b.md'], unenrolled: [] });
+
+		target.path = 'memo.md';
+		target.extension = 'md';
+		expect(store.rename(target, 'memo.txt')).toBe(true);
+		expect(paths()).toEqual({ notes: ['b.md'], unenrolled: ['memo.md'] });
+		expect(listCalls).toBe(1);
+	});
+
+	it('インデックスにない md 以外のファイルの名前の変更では false', () => {
+		put(file('a.md'), note('a.md'));
+		store.get();
+		const image = file('img.png');
+		image.extension = 'png';
+		image.path = 'img2.png';
+		expect(store.rename(image, 'img.png')).toBe(false);
+	});
+
+	it('登録済みのノートを未登録のノートと同じ場所に重ねても、二重に入らない', () => {
+		const target = file('a.md');
+		put(target, note('a.md'));
+		const stale = file('b.md');
+		put(stale, null);
+		store.get();
+		target.path = 'b.md';
+		target.basename = 'b';
+		states.set('b.md', note('b.md'));
+		expect(store.rename(target, 'a.md')).toBe(true);
+		expect(paths()).toEqual({ notes: ['b.md'], unenrolled: [] });
 	});
 
 	it('invalidate のあとは、次に使うときに全体から作り直す', () => {

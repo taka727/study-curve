@@ -133,6 +133,31 @@ export class StudyIndexStore {
 		return true;
 	}
 
+	/**
+	 * ファイルの名前・場所・拡張子が変わった。古い場所から除き、拡張子が md なら新しい場所に入れ直す。
+	 * 未登録の一覧は TFile をそのまま持つので、通知の時点で path はもう新しい値になっている。
+	 * そのため古いパスだけでなく、同じオブジェクトかどうかでも探す
+	 */
+	rename(file: TFile, oldPath: string): boolean {
+		const index = this.index;
+		if (index === null) return true;
+		const notes = index.notes.filter((note) => note.filePath !== oldPath && note.filePath !== file.path);
+		const unenrolled = index.unenrolled.filter(
+			(candidate) => candidate !== file && candidate.path !== oldPath && candidate.path !== file.path,
+		);
+		const removed = notes.length !== index.notes.length || unenrolled.length !== index.unenrolled.length;
+		if (file.extension !== 'md') {
+			if (removed) this.index = { notes, unenrolled };
+			return removed;
+		}
+		const note = this.read(file);
+		this.index =
+			note !== null
+				? { notes: insertSorted(notes, note, (value) => value.filePath), unenrolled }
+				: { notes, unenrolled: insertSorted(unenrolled, file, (value) => value.path) };
+		return true;
+	}
+
 	/** ファイルが消えた。インデックスになければ false */
 	remove(path: string): boolean {
 		const index = this.index;

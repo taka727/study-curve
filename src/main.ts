@@ -91,13 +91,16 @@ export default class StudyCurvePlugin extends Plugin {
 	private readonly settingsLoad = new SettingsLoadSequencer();
 
 	async onload() {
-		await this.loadSettings();
+		// actions とインデックスは、設定の読み込みを待つ前に作る。同期による設定の読み直し
+		// （onExternalSettingsChange）が、最初の読み込みより先に終わって invalidateIndex を呼ぶことがあるため。
+		// どちらも作るだけでは設定を読まない
 		this.actions = new StudyActions(this);
 		this.indexStore = new StudyIndexStore(
 			() => this.app.vault.getMarkdownFiles(),
 			(file) =>
 				readIndexedNote(this.app, file, (path, fromCache) => this.actions.stateFor(path, fromCache)),
 		);
+		await this.loadSettings();
 
 		// メタデータやファイルが動いたら、そのファイルの分だけインデックスを差し替え、
 		// 中身が変わったときだけ描き直す（#13）。登録していないノートの編集や、本文だけの編集では
@@ -124,10 +127,7 @@ export default class StudyCurvePlugin extends Plugin {
 					// フォルダの移動は中のファイルをまとめて動かすので、全体から作り直す
 					this.invalidateIndex();
 				} else {
-					// 拡張子が変わって md でなくなった（または md になった）ときは、片方だけを扱う
-					const removed = oldPath.endsWith('.md') && this.indexStore.remove(oldPath);
-					const added = isMarkdown(file) && this.indexStore.update(file);
-					this.refreshIf(removed || added);
+					this.refreshIf(this.indexStore.rename(file, oldPath));
 				}
 			}),
 		);
