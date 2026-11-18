@@ -172,6 +172,12 @@ export default class StudyCurvePlugin extends Plugin {
 			});
 		}
 
+		// 採点のあとにノートやフォルダの名前を変えても、そのノートの採点を取り消せるようにする（#5）
+		this.registerEvent(
+			this.app.vault.on('rename', (file, oldPath) => this.actions.pathRenamed(oldPath, file.path)),
+		);
+		this.registerEvent(this.app.vault.on('delete', (file) => this.actions.pathDeleted(file.path)));
+
 		this.addCommand({
 			id: 'undo-last-grade',
 			name: '直前の採点を取り消す',

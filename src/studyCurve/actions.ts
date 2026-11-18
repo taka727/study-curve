@@ -44,6 +44,8 @@ const TEXT = {
 	undoButton: '取り消す',
 	undone: (name: string, grade: string) => `${name} の採点（${grade}）を取り消しました`,
 	nothingToUndo: '取り消せる採点はありません',
+	undoStale: (name: string) =>
+		`${name} の採点はもう取り消せません（取り消せるのは、いちばん最後の採点だけです）`,
 	undoConflict: (name: string) =>
 		`${name} は採点のあとに変わっているので、取り消しませんでした（その変更を消さないため）`,
 	undoBusy: (name: string) =>
@@ -159,6 +161,16 @@ export const WRITTEN_STATE_TTL_MS = 30_000;
 const UNDO_NOTICE_MS = 8_000;
 
 /**
+ * 取り消せる採点の記録（#5）。通知の「取り消す」ボタンは、作ったときの記録を持つ。
+ * filePath は、採点のあとにノートやフォルダの名前を変えたら書き換える
+ */
+interface GradeRecord {
+	filePath: string;
+	readonly grade: Grade;
+	readonly undo: GradeUndo;
+}
+
+/**
  * updateDeck の結果。missing：対象のデッキが設定になかった（同期で読み直された、ほかで削除された）／
  * busy：ほかのまとめての処理の最中で、名前の変更（ノートの書き換え）を始められない。設定も変えていない／
  * blocked：設定を保存できない（新しい版の設定を読んだ、読み直しの最中。#27）ので、何も変えていない
@@ -227,7 +239,9 @@ export class StudyActions {
 	 * 直前の採点（#5）。取り消すと null。Obsidian を閉じると消える（取り消せるのは、この起動の間の直前の1回だけ）。
 	 * 次に採点すると、その採点に置き換わる
 	 */
-	private lastGrade: { filePath: string; grade: Grade; undo: GradeUndo } | null = null;
+	private lastGrade: GradeRecord | null = null;
+	/** 直前の採点の通知。次に採点したら閉じる（古い通知の「取り消す」を押さないように） */
+	private gradeNotice: Notice | null = null;
 
 	constructor(private readonly plugin: StudyCurvePlugin) {}
 
@@ -331,7 +345,7 @@ export class StudyActions {
 	async grade(filePath: string, grade: Grade): Promise<GradeResult | null> {
 		const { settings } = this.plugin;
 		try {
-			let undo: GradeUndo | null = null;
+			const holder: { record?: GradeRecord } = {};
 			const result = await this.exclusive(filePath, (onWritten) =>
 				gradeNote(
 					this.plugin.app,
@@ -347,19 +361,26 @@ export class StudyActions {
 								: null,
 					},
 					(before, after) => {
-						undo = { before: gradeFields(before), after: gradeFields(after) };
+						// 取り消す対象は、frontmatter を保存した時点で決める。本文のチェックを外し終わるのを
+						// 待つと、その間に別のノートを採点したとき、遅れて終わったこちらが最新の記録を上書きする
+						const record: GradeRecord = {
+							filePath,
+							grade,
+							undo: { before: gradeFields(before), after: gradeFields(after) },
+						};
+						holder.record = record;
+						this.lastGrade = record;
 						onWritten(before, after);
 					},
 				),
 			);
 			if (result) {
-				if (undo !== null) this.lastGrade = { filePath, grade, undo };
-				new Notice(
-					messageWithAction(
-						TEXT.graded(basenameOf(filePath), formatShort(result.nextDate), result.clampedByExam),
-						TEXT.undoButton,
-						() => void this.undoLastGrade(),
-					),
+				const message = TEXT.graded(basenameOf(filePath), formatShort(result.nextDate), result.clampedByExam);
+				const record = holder.record;
+				this.gradeNotice?.hide();
+				// ボタンはこの採点の記録を持つ。あとで別の採点をしていたら、そちらを取り消さずに断る
+				this.gradeNotice = new Notice(
+					record ? messageWithAction(message, TEXT.undoButton, () => this.undoGrade(record)) : message,
 					UNDO_NOTICE_MS,
 				);
 				if (result.bodyError) {
@@ -383,10 +404,21 @@ export class StudyActions {
 	 * 採点のあとにそのノートが変わっていたら（続けて採点した、明日に送ったなど）、取り消さずに知らせ、
 	 * その採点は取り消せる対象から外す。処理中なら取り消さずに知らせ、あとでもう一度実行できるように残す
 	 */
-	async undoLastGrade(): Promise<boolean> {
-		const last = this.lastGrade;
+	undoLastGrade(): Promise<boolean> {
+		return this.undoGrade(this.lastGrade);
+	}
+
+	/**
+	 * 通知のボタンから、その通知の採点を取り消す。いちばん最後の採点でなくなっていたら
+	 * （あとで別の採点をした、取り消し済みなど）、取り消さずに知らせる
+	 */
+	private async undoGrade(last: GradeRecord | null): Promise<boolean> {
 		if (last === null) {
 			new Notice(TEXT.nothingToUndo);
+			return false;
+		}
+		if (last !== this.lastGrade) {
+			new Notice(TEXT.undoStale(basenameOf(last.filePath)));
 			return false;
 		}
 		const name = basenameOf(last.filePath);
@@ -410,6 +442,27 @@ export class StudyActions {
 				new Notice(TEXT.undoFailed(errorMessage(error)));
 			}
 			return false;
+		}
+	}
+
+	/**
+	 * ノートやフォルダの名前を変えた・移動した。取り消せる採点の記録のパスを合わせる（#5）。
+	 * フォルダの場合は、その中のノートの記録を合わせる
+	 */
+	pathRenamed(oldPath: string, newPath: string): void {
+		const last = this.lastGrade;
+		if (last === null) return;
+		if (last.filePath === oldPath) last.filePath = newPath;
+		else if (last.filePath.startsWith(`${oldPath}/`)) {
+			last.filePath = newPath + last.filePath.slice(oldPath.length);
+		}
+	}
+
+	/** ノートやフォルダを消した。そのノートの採点は取り消せる対象から外す（#5） */
+	pathDeleted(path: string): void {
+		const last = this.lastGrade;
+		if (last !== null && (last.filePath === path || last.filePath.startsWith(`${path}/`))) {
+			this.lastGrade = null;
 		}
 	}
 

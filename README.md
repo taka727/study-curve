@@ -137,7 +137,7 @@ No hotkeys are assigned by default. Assigning hotkeys to ☆ ◯ △ ✗ lets yo
 | このノートの復習を休止／再開 | Suspend / resume this note | Toggles `study-suspended` |
 | 直前の採点を取り消す | Undo last grade | Restores `study-stage`, `study-next` and `study-history` to what they were before the last grade |
 
-**Undoing a grade.** The notice after grading has a "取り消す" (Undo) button; the command above does the same. Only the last grade since Obsidian started can be undone. If the note has changed since (graded again, postponed, unenrolled or edited by hand), Study Curve leaves it alone and tells you. Checkboxes cleared by "Clear checks after grading" are not restored.
+**Undoing a grade.** The notice after grading has a "取り消す" (Undo) button; the command above does the same. Only the last grade since Obsidian started can be undone. If the note has changed since (graded again, postponed, unenrolled or edited by hand), Study Curve leaves it alone and tells you. The button on an older grade notice never undoes a later grade. Checkboxes cleared by "Clear checks after grading" are not restored.
 
 ## Code blocks
 

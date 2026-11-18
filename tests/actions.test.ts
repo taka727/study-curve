@@ -12,6 +12,15 @@ import { studyNoteFromFrontmatter } from '../src/studyCurve/studyIndex';
 import type { DeckConfig, StudyNote } from '../src/studyCurve/types';
 import { Notice, TFile, noticeLog } from './obsidian-stub';
 
+// 通知の「取り消す」ボタン（#5）。テストは DOM がないので、ボタンを押す代わりに渡された onClick を呼ぶ
+const { noticeActions } = vi.hoisted(() => ({ noticeActions: [] as Array<() => unknown> }));
+vi.mock('../src/studyCurve/noticeAction', () => ({
+	messageWithAction: (message: string, _label: string, onClick: () => unknown) => {
+		noticeActions.push(onClick);
+		return message;
+	},
+}));
+
 // StudyActions の非同期の経路（処理中の判定、競合時の無視、例外時のロック解除、
 // 書き込んだ状態を metadataCache に反映されるまでインデックスに使う扱い）を、
 // Obsidian の API の偽物で確かめる。
@@ -38,6 +47,8 @@ class FakeVault {
 	writes = 0;
 	/** 次の processFrontMatter を止めておく門 */
 	nextGate: Promise<void> | null = null;
+	/** 設定すると、次の Vault.process（本文の書き込み）はこれが解決するまで待つ */
+	nextProcessGate: Promise<void> | null = null;
 	/** Vault.process が本文を書いた回数 */
 	bodyWrites = 0;
 	/** 次の Vault.process のコールバックの直前に、本文に加える編集（読み込みのあとの編集や同期） */
@@ -83,6 +94,9 @@ class FakeVault {
 					this.cachedBody.get(file.path) ?? this.notes.get(file.path)!.body,
 				// 本物と同じく、最新の本文をコールバックに渡し、その戻り値を書く
 				process: async (file: TFile, fn: (data: string) => string) => {
+					const waitFor = this.nextProcessGate;
+					this.nextProcessGate = null;
+					if (waitFor) await waitFor;
 					if (this.failProcess) throw new Error('書き込めません');
 					const note = this.notes.get(file.path)!;
 					const edit = this.editBeforeProcess;
@@ -162,6 +176,7 @@ beforeEach(() => {
 	// actions は window.setTimeout を使う。テストは Node なので window を globalThis にする
 	vi.stubGlobal('window', globalThis);
 	noticeLog.length = 0;
+	noticeActions.length = 0;
 	vault = new FakeVault();
 	vault.add(A, enrolled());
 	vault.add(B, enrolled());
@@ -530,6 +545,95 @@ describe('StudyActions.undoLastGrade（#5）', () => {
 		expect(await actions.undoLastGrade()).toBe(false);
 		expect(noticeLog).toEqual(['採点の取り消しに失敗しました：保存できません']);
 		expect(actions.canUndoGrade()).toBe(true);
+	});
+
+	it('通知の「取り消す」は、その通知の採点を取り消す', async () => {
+		await actions.grade(A, 'good');
+		actions.viewsRefreshing();
+		expect(noticeActions).toHaveLength(1);
+		expect(await noticeActions[0]!()).toBe(true);
+		expect(vault.fm(A)).toEqual(enrolled());
+	});
+
+	it('あとで別のノートを採点していたら、古い通知の「取り消す」は何もせずに知らせる', async () => {
+		await actions.grade(A, 'good');
+		actions.viewsRefreshing();
+		await actions.grade(B, 'hard');
+		actions.viewsRefreshing();
+		const graded = { a: structuredClone(vault.fm(A)), b: structuredClone(vault.fm(B)) };
+		noticeLog.length = 0;
+
+		expect(await noticeActions[0]!()).toBe(false);
+		expect({ a: vault.fm(A), b: vault.fm(B) }).toEqual(graded);
+		expect(noticeLog).toEqual([
+			'A の採点はもう取り消せません（取り消せるのは、いちばん最後の採点だけです）',
+		]);
+		// 新しい通知の「取り消す」と、コマンドは B の採点を取り消せる
+		expect(actions.canUndoGrade()).toBe(true);
+		expect(await noticeActions[1]!()).toBe(true);
+		expect(vault.fm(B)).toEqual(enrolled());
+		expect(vault.fm(A)).toEqual(graded.a);
+	});
+
+	it('次に採点したら、前の採点の通知を閉じる', async () => {
+		const hide = vi.spyOn(Notice.prototype, 'hide');
+		await actions.grade(A, 'good');
+		actions.viewsRefreshing();
+		expect(hide).not.toHaveBeenCalled();
+		await actions.grade(B, 'good');
+		expect(hide).toHaveBeenCalledTimes(1);
+		hide.mockRestore();
+	});
+
+	it('本文の処理が遅れた採点が、あとで保存した採点の記録を上書きしない', async () => {
+		settings.clearChecksOnGrade = true;
+		vault.add(A, enrolled(), '## 思い出せるか\n- [x] 思い出せた\n');
+		const g = gate();
+		vault.nextProcessGate = g.wait;
+		// A は frontmatter を保存し、本文の書き込みで止まる
+		const gradingA = actions.grade(A, 'good');
+		await vi.waitFor(() => expect(vault.fm(A)['study-stage']).toBe(1));
+		await actions.grade(B, 'hard');
+		g.open();
+		await gradingA;
+		actions.viewsRefreshing();
+
+		expect(await actions.undoLastGrade()).toBe(true);
+		expect(vault.fm(B)).toEqual(enrolled());
+		expect(vault.fm(A)['study-stage']).toBe(1);
+	});
+
+	it('採点のあとにノートの名前を変えても、新しい場所のノートを取り消せる', async () => {
+		await actions.grade(A, 'good');
+		actions.viewsRefreshing();
+		vault.notes.set('deck/A2.md', vault.notes.get(A)!);
+		vault.notes.delete(A);
+		actions.pathRenamed(A, 'deck/A2.md');
+
+		expect(await actions.undoLastGrade()).toBe(true);
+		expect(vault.fm('deck/A2.md')).toEqual(enrolled());
+	});
+
+	it('採点のあとにフォルダの名前を変えても、中のノートを取り消せる', async () => {
+		await actions.grade(A, 'good');
+		actions.viewsRefreshing();
+		vault.notes.set('deck2/A.md', vault.notes.get(A)!);
+		vault.notes.delete(A);
+		actions.pathRenamed('deck', 'deck2');
+		// 名前が前方一致するだけの別のフォルダは関係ない
+		actions.pathRenamed('dec', 'other');
+
+		expect(await actions.undoLastGrade()).toBe(true);
+		expect(vault.fm('deck2/A.md')).toEqual(enrolled());
+	});
+
+	it('採点したノートを消したら、取り消せる対象から外す', async () => {
+		await actions.grade(A, 'good');
+		actions.viewsRefreshing();
+		actions.pathDeleted(B);
+		expect(actions.canUndoGrade()).toBe(true);
+		actions.pathDeleted('deck');
+		expect(actions.canUndoGrade()).toBe(false);
 	});
 
 	it('採点に失敗したら、取り消せる採点は変わらない', async () => {
