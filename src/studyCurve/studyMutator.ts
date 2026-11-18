@@ -1,5 +1,6 @@
 import { App, TFile } from 'obsidian';
 import { clearChecksInSection } from './checkboxes';
+import { insertSelfCheckSection } from './selfCheck';
 import { isISODate, todayISO } from './dateUtils';
 import { ScheduleResult, initialNextDate, postponeTarget, scheduleReview } from './schedule';
 import {
@@ -55,6 +56,19 @@ async function clearSectionChecks(app: App, file: TFile, keyword: string): Promi
 	const current = await app.vault.read(file);
 	if (clearChecksInSection(current, keyword) === current) return false;
 	await app.vault.process(file, (data) => clearChecksInSection(data, keyword));
+	return true;
+}
+
+/**
+ * ノートに「思い出せるか」の空欄と判定表を差し込む（#2）。差し込んだら true、もう欄があれば false。
+ * 事前の確認は vault.read（ディスクから読む）で行い、書き換えは Vault.process がコールバックに渡す
+ * 最新の本文に対して行う（読み込みと書き込みのあいだの編集や同期を上書きしない）。
+ * そのあいだに欄が足されていたら、本文はそのまま返す
+ */
+export async function insertSelfCheck(app: App, file: TFile): Promise<boolean> {
+	const current = await app.vault.read(file);
+	if (insertSelfCheckSection(current) === null) return false;
+	await app.vault.process(file, (data) => insertSelfCheckSection(data) ?? data);
 	return true;
 }
 

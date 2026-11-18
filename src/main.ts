@@ -31,7 +31,7 @@ import {
 	readStudyNote,
 	resolveDeckForPath,
 } from './studyCurve/studyIndex';
-import { enrollNote, setSuspended } from './studyCurve/studyMutator';
+import { enrollNote, insertSelfCheck, setSuspended } from './studyCurve/studyMutator';
 import { DeckConfig, Grade, GRADE_LABELS, QueueItem, StudyNote } from './studyCurve/types';
 
 // 新しく足す UI の文言（#15 の多言語化で移しやすいように先頭にまとめる）
@@ -54,6 +54,11 @@ const TEXT = {
 		'Study Curve：設定を読み直していたため、今の変更は保存しませんでした。もう一度変えてください。',
 	unreadable:
 		'Study Curve：設定ファイル（data.json）を読み込めなかったため、既定の設定で動いています。設定を変えると、ファイルは書き直されます。',
+	// 自己チェック欄の差し込み（#2）
+	insertSelfCheck: 'このノートに自己チェック欄を追加',
+	selfCheckInserted: (name: string) => `${name} に「思い出せるか」の欄と判定表を追加しました`,
+	selfCheckExists: (name: string) => `${name} にはもう「思い出せるか」の欄があります`,
+	selfCheckFailed: (reason: string) => `自己チェック欄の追加に失敗しました：${reason}`,
 };
 
 /** 設定の版や読み込みの問題を知らせる通知の表示時間 */
@@ -145,6 +150,17 @@ export default class StudyCurvePlugin extends Plugin {
 			id: 'create-review-note',
 			name: TEXT.createNote,
 			callback: () => this.chooseDeckForNewNote(),
+		});
+
+		this.addCommand({
+			id: 'insert-self-check',
+			name: TEXT.insertSelfCheck,
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file || file.extension !== 'md') return false;
+				if (!checking) void this.insertSelfCheckInto(file);
+				return true;
+			},
 		});
 
 		this.addCommand({
@@ -287,6 +303,16 @@ export default class StudyCurvePlugin extends Plugin {
 		const note = this.getIndex().notes.find((candidate) => candidate.filePath === filePath);
 		if (!note) return;
 		this.confirmUnenroll(note);
+	}
+
+	/** コマンド「このノートに自己チェック欄を追加」（#2）。結果は通知で知らせる */
+	private async insertSelfCheckInto(file: TFile): Promise<void> {
+		try {
+			const inserted = await insertSelfCheck(this.app, file);
+			new Notice(inserted ? TEXT.selfCheckInserted(file.basename) : TEXT.selfCheckExists(file.basename));
+		} catch (error) {
+			new Notice(TEXT.selfCheckFailed(errorMessage(error)));
+		}
 	}
 
 	private async enrollWithDeckPrompt(file: TFile): Promise<void> {

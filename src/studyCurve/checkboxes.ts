@@ -72,7 +72,7 @@ function stripQuotes(text: string, depth: number): string | null {
 }
 
 /** 先頭の frontmatter の行数。閉じがなければ frontmatter ではない（Obsidian と同じ）ので 0 */
-function frontmatterLength(lines: Line[]): number {
+export function frontmatterLength(lines: Line[]): number {
 	if (lines.length === 0 || !FRONTMATTER_FENCE.test(lines[0]!.text)) return 0;
 	for (let i = 1; i < lines.length; i++) {
 		if (FRONTMATTER_FENCE.test(lines[i]!.text)) return i + 1;
