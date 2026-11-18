@@ -169,6 +169,7 @@ deck: AWS ANS   # optional
 | 直前総ざらいの日数 | Final review days | 7 | Show every note of a deck when its exam is closer than this |
 | 予定グラフの日数 | Forecast days | 14 | Default for the board and `study-forecast` |
 | 採点したら次のノートを開く | Open the next note after grading | On | After grading on the board, open the next note |
+| ステータスバーに今日の復習件数を出す | Show today's review count in the status bar | On | Desktop only. Shows "復習 12" (reviews 12); click it to open the board. The count is the same as today's list on the board (up to the daily limit) |
 | 採点したら本文のチェックを外す | Clear checks after grading | **Off** | When on, completed checkboxes (`- [x]`) under the heading below are reset to `- [ ]`. Other sections, the frontmatter and code blocks are not touched |
 | チェックを外す見出し | Heading for clearing checks | `思い出せるか` | From a heading containing this text to the next heading of the same or higher level |
 | 復習ノートのテンプレート | Review note template | (empty) | Empty uses the built-in template |
@@ -207,7 +208,7 @@ Unenrolling removes all five keys and leaves the other keys alone.
 
 ## Mobile
 
-Study Curve works the same on Mac, Windows, iPad and Android (`isDesktopOnly: false`; no Node or Electron APIs).
+Study Curve works the same on Mac, Windows, iPad and Android (`isDesktopOnly: false`; no Node or Electron APIs). The only exception is the review count in the status bar, which is desktop only because mobile has no status bar.
 
 The layout follows the width that is actually available, not the device: a phone in portrait, an iPad in split view and the board in a narrow sidebar on a Mac look the same at the same width.
 

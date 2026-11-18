@@ -52,6 +52,8 @@ const TEXT = {
 	examToday: '（今日）',
 	examOver: '（終了）',
 	edit: '編集',
+	statusBarName: 'ステータスバーに今日の復習件数を出す',
+	statusBarDesc: 'デスクトップのみ。クリックで復習ボードを開く。件数は復習ボードの今日の一覧と同じ（1日に出す上限まで）。',
 	deckMissing: 'デッキが見つかりませんでした。設定画面を開き直してください。',
 };
 
@@ -80,6 +82,8 @@ export interface StudyCurveSettings {
 	checkSectionHeading: string;
 	// 「復習ノートを作成」で使うテンプレートのファイルのパス。空なら内蔵の型（#10）
 	noteTemplatePath: string;
+	// ステータスバーに今日の復習の件数を出すか（デスクトップのみ。モバイルにはステータスバーがない）
+	showStatusBar: boolean;
 }
 
 // デッキの既定は空。最初のデッキは復習ボードの案内から作るか、登録済みのノートから取り込む。
@@ -95,6 +99,7 @@ export const DEFAULT_SETTINGS: StudyCurveSettings = {
 	clearChecksOnGrade: false,
 	checkSectionHeading: '思い出せるか',
 	noteTemplatePath: '',
+	showStatusBar: true,
 };
 
 /** 整数の設定と、その下限。整える処理（#27）と設定画面の入力の検証（#26）で同じ値を使う */
@@ -171,6 +176,7 @@ export function normalizeSettings(data: SettingsData): {
 			clearChecksOnGrade: take('clearChecksOnGrade', isBoolean, defaults.clearChecksOnGrade),
 			checkSectionHeading: take('checkSectionHeading', isString, defaults.checkSectionHeading),
 			noteTemplatePath: take('noteTemplatePath', isString, defaults.noteTemplatePath),
+			showStatusBar: take('showStatusBar', isBoolean, defaults.showStatusBar),
 		},
 		resetKeys,
 	};
@@ -463,6 +469,17 @@ export class StudyCurveSettingTab extends PluginSettingTab {
 						this.plugin.settings.autoAdvance = value;
 						await this.plugin.saveSettings();
 					}),
+			);
+
+		new Setting(containerEl)
+			.setName(TEXT.statusBarName)
+			.setDesc(TEXT.statusBarDesc)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.showStatusBar).onChange(async (value) => {
+					this.plugin.settings.showStatusBar = value;
+					// 保存でインデックスを捨てて描き直すので、ステータスバーもそこで出し入れされる
+					await this.plugin.saveSettings();
+				}),
 			);
 
 		new Setting(containerEl).setName(TEXT.noteHeading).setHeading();
