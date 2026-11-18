@@ -1,4 +1,5 @@
-import { App, Notice, PluginSettingTab, Setting, TFolder } from 'obsidian';
+import { App, Notice, PluginSettingTab, Setting, TFolder, requireApiVersion } from 'obsidian';
+import type { SettingDefinition, SettingDefinitionItem } from 'obsidian';
 import type StudyCurvePlugin from './main';
 import { SETTINGS_VERSION, SettingsData, migrateSettingsData } from './settingsMigration';
 import { findNoteTemplate } from './studyCurve/actions';
@@ -55,7 +56,30 @@ const TEXT = {
 	statusBarName: 'ステータスバーに今日の復習件数を出す',
 	statusBarDesc: 'デスクトップのみ。クリックで復習ボードを開く。件数は復習ボードの今日の一覧と同じ（1日に出す上限まで）。',
 	deckMissing: 'デッキが見つかりませんでした。設定画面を開き直してください。',
+	// 見出しと、デッキの欄の説明（#1 で、新旧の描き方で同じ文言を使うために移した）
+	intervalsHeading: '復習間隔',
+	deckHeading: 'デッキ（資格・科目）',
+	deckIntro:
+		'フォルダは未登録ノートの洗い出しと、ノート登録時のデッキ自動判定に使う。試験日を入れると、それを越える復習予定は試験日当日まで前倒しされる。',
+	addDeck: 'デッキを追加',
+	removeDeck: 'このデッキを削除',
 };
+
+/**
+ * 設定画面の1行（#1）。build は渡された行に名前・説明・入力欄を付ける。
+ * Obsidian 1.13 以上の宣言的な描き方（getSettingDefinitions）と、それより古い版の display で同じものを使う
+ */
+interface SettingRow {
+	name: string;
+	/** 設定の検索に使う説明（描くときは build が付け直す） */
+	desc?: string;
+	build: (setting: Setting) => void;
+}
+
+interface SettingSection {
+	heading: string;
+	rows: SettingRow[];
+}
 
 /** 一覧の試験日。年が分かるように YYYY-MM-DD で出し、残りの日数を添える（formatShort は年がない） */
 function examDateLabel(examDate: string | null, today: string): string {
@@ -271,7 +295,10 @@ export class StudyCurveSettingTab extends PluginSettingTab {
 
 	/** 開いていれば、今の設定で描き直す（同期で設定を読み直したとき。入力中の欄のカーソルは外れる） */
 	refreshIfShown(): void {
-		if (this.shown) this.display();
+		// 1.13 以上は getSettingDefinitions から宣言的に描かれるので、update で描き直す
+		// （display を呼び直しても描き直されない）
+		if (requireApiVersion('1.13.0')) this.update();
+		else if (this.shown) this.renderLegacy();
 	}
 
 	hide(): void {
@@ -361,12 +388,12 @@ export class StudyCurveSettingTab extends PluginSettingTab {
 
 	/** 整数の欄（#26）。下限は INTEGER_SETTINGS（#27 の読み込みの整える処理と同じ値） */
 	private addIntegerSetting(
-		containerEl: HTMLElement,
+		setting: Setting,
 		key: keyof typeof INTEGER_SETTINGS,
 		name: string,
 		desc: string,
 	): void {
-		this.addValidatedText(new Setting(containerEl).setName(name).setDesc(desc), {
+		this.addValidatedText(setting.setName(name).setDesc(desc), {
 			value: String(this.plugin.settings[key]),
 			// スマホで数字のキーボードを出す。type="number" は 2.5 や 1e3 を受け付け、空と不正を区別できない
 			inputMode: 'numeric',
@@ -416,110 +443,175 @@ export class StudyCurveSettingTab extends PluginSettingTab {
 		});
 	}
 
+	/**
+	 * Obsidian 1.13 以上で、設定画面の中身と設定の検索に使う（#1）。開くたびと、update のたびに呼ばれる。
+	 * 設定画面を作ったとき（起動中）にも呼ばれるので、ここでは Vault を読まない（ノートの件数は描くときに数える）
+	 */
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		const general: SettingDefinitionItem[] = this.generalSections().map((section) => ({
+			type: 'group',
+			heading: section.heading,
+			items: section.rows.map(toDefinition),
+		}));
+		const deckRows = this.deckRows();
+		const addDeck: SettingDefinition = {
+			name: TEXT.addDeck,
+			desc: deckRows.length === 0 ? `${TEXT.deckIntro}${TEXT.noDecks}` : TEXT.deckIntro,
+			render: (setting) => {
+				setting.setName(TEXT.addDeck);
+				setting.setDesc(deckRows.length === 0 ? `${TEXT.deckIntro}${TEXT.noDecks}` : TEXT.deckIntro);
+				this.addCreateDeckButton(setting);
+			},
+		};
+		return [
+			...general,
+			{ type: 'group', heading: TEXT.deckHeading, items: [...deckRows.map(toDefinition), addDeck] },
+		];
+	}
+
+	/**
+	 * Obsidian 1.13 より古い版で、設定画面を描く。1.13 以上では、getSettingDefinitions が
+	 * 空でない配列を返すので呼ばれない（minAppVersion が 1.7.2 なので残す）
+	 */
 	display(): void {
+		this.renderLegacy();
+	}
+
+	private renderLegacy(): void {
 		this.shown = true;
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl).setName('復習間隔').setHeading();
+		for (const section of this.generalSections()) {
+			new Setting(containerEl).setName(section.heading).setHeading();
+			for (const row of section.rows) row.build(new Setting(containerEl));
+		}
 
+		new Setting(containerEl).setName(TEXT.deckHeading).setHeading();
+		containerEl.createEl('p', { cls: 'setting-item-description', text: TEXT.deckIntro });
+		const deckRows = this.deckRows();
+		if (deckRows.length === 0) {
+			containerEl.createEl('p', { cls: 'setting-item-description', text: TEXT.noDecks });
+		}
+		for (const row of deckRows) row.build(new Setting(containerEl));
+		this.addCreateDeckButton(new Setting(containerEl));
+	}
+
+	/** デッキの一覧より上の欄（復習間隔、復習ノート） */
+	private generalSections(): SettingSection[] {
 		const defaultIntervals = formatIntervals(DEFAULT_INTERVALS);
-		// 入力欄の文字は書き換えない（入力中にカーソルが飛ばないように）。そろえた形は次に開いたときに出る
-		this.addValidatedText(
-			new Setting(containerEl)
-				.setName('ステージごとの間隔（日）')
-				.setDesc(TEXT.intervalsDesc(defaultIntervals)),
+		return [
 			{
-				value: this.plugin.settings.intervalsRaw,
-				placeholder: defaultIntervals,
-				parse: parseIntervalsInput,
-				saved: () => this.plugin.settings.intervalsRaw || TEXT.blankValue,
-				apply: (value) => {
-					this.plugin.settings.intervalsRaw = value;
-				},
-			},
-		);
-
-		this.addIntegerSetting(
-			containerEl,
-			'dailyLimit',
-			'1日に出す上限',
-			'復習キューに並べる最大件数。0で無制限。',
-		);
-		this.addIntegerSetting(
-			containerEl,
-			'finalSprintDays',
-			'直前総ざらいの日数',
-			'試験日までこの日数を切ったデッキは、予定日に関係なく全ノートを復習キューに出す。',
-		);
-		this.addIntegerSetting(
-			containerEl,
-			'forecastDays',
-			'予定グラフの日数',
-			'復習ボードと study-forecast ブロックで先を見る日数。',
-		);
-
-		new Setting(containerEl)
-			.setName('採点したら次のノートを開く')
-			.setDesc('復習ボードで☆◯△✗を押した直後に、キューの次のノートを開く。')
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.autoAdvance)
-					.onChange(async (value) => {
-						this.plugin.settings.autoAdvance = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName(TEXT.statusBarName)
-			.setDesc(TEXT.statusBarDesc)
-			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.showStatusBar).onChange(async (value) => {
-					this.plugin.settings.showStatusBar = value;
+				heading: TEXT.intervalsHeading,
+				rows: [
+					{
+						name: 'ステージごとの間隔（日）',
+						desc: TEXT.intervalsDesc(defaultIntervals),
+						build: (setting) =>
+							// 入力欄の文字は書き換えない（入力中にカーソルが飛ばないように）。そろえた形は次に開いたときに出る
+							this.addValidatedText(
+								setting
+									.setName('ステージごとの間隔（日）')
+									.setDesc(TEXT.intervalsDesc(defaultIntervals)),
+								{
+									value: this.plugin.settings.intervalsRaw,
+									placeholder: defaultIntervals,
+									parse: parseIntervalsInput,
+									saved: () => this.plugin.settings.intervalsRaw || TEXT.blankValue,
+									apply: (value) => {
+										this.plugin.settings.intervalsRaw = value;
+									},
+								},
+							),
+					},
+					this.integerRow('dailyLimit', '1日に出す上限', '復習キューに並べる最大件数。0で無制限。'),
+					this.integerRow(
+						'finalSprintDays',
+						'直前総ざらいの日数',
+						'試験日までこの日数を切ったデッキは、予定日に関係なく全ノートを復習キューに出す。',
+					),
+					this.integerRow(
+						'forecastDays',
+						'予定グラフの日数',
+						'復習ボードと study-forecast ブロックで先を見る日数。',
+					),
+					this.toggleRow(
+						'autoAdvance',
+						'採点したら次のノートを開く',
+						'復習ボードで☆◯△✗を押した直後に、キューの次のノートを開く。',
+					),
 					// 保存でインデックスを捨てて描き直すので、ステータスバーもそこで出し入れされる
-					await this.plugin.saveSettings();
-				}),
-			);
+					this.toggleRow('showStatusBar', TEXT.statusBarName, TEXT.statusBarDesc),
+				],
+			},
+			{
+				heading: TEXT.noteHeading,
+				rows: [
+					this.toggleRow('clearChecksOnGrade', TEXT.clearChecksName, TEXT.clearChecksDesc),
+					{
+						// トグルが OFF でも表示する（出し分けのために設定画面を描き直さない）
+						name: TEXT.checkSectionName,
+						desc: TEXT.checkSectionDesc,
+						build: (setting) => {
+							setting
+								.setName(TEXT.checkSectionName)
+								.setDesc(TEXT.checkSectionDesc)
+								.addText((text) =>
+									text
+										.setPlaceholder(DEFAULT_SETTINGS.checkSectionHeading)
+										.setValue(this.plugin.settings.checkSectionHeading)
+										.onChange(async (value) => {
+											this.plugin.settings.checkSectionHeading = value.trim();
+											await this.plugin.saveSettings();
+										}),
+								);
+						},
+					},
+					{
+						name: TEXT.templateName,
+						desc: TEXT.templateDesc,
+						build: (setting) => this.buildTemplateSetting(setting),
+					},
+				],
+			},
+		];
+	}
 
-		new Setting(containerEl).setName(TEXT.noteHeading).setHeading();
+	private integerRow(key: keyof typeof INTEGER_SETTINGS, name: string, desc: string): SettingRow {
+		return { name, desc, build: (setting) => this.addIntegerSetting(setting, key, name, desc) };
+	}
 
-		new Setting(containerEl)
-			.setName(TEXT.clearChecksName)
-			.setDesc(TEXT.clearChecksDesc)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.clearChecksOnGrade)
-					.onChange(async (value) => {
-						this.plugin.settings.clearChecksOnGrade = value;
-						await this.plugin.saveSettings();
-					}),
-			);
+	private toggleRow(
+		key: 'autoAdvance' | 'showStatusBar' | 'clearChecksOnGrade',
+		name: string,
+		desc: string,
+	): SettingRow {
+		return {
+			name,
+			desc,
+			build: (setting) => {
+				setting
+					.setName(name)
+					.setDesc(desc)
+					.addToggle((toggle) =>
+						toggle.setValue(this.plugin.settings[key]).onChange(async (value) => {
+							this.plugin.settings[key] = value;
+							await this.plugin.saveSettings();
+						}),
+					);
+			},
+		};
+	}
 
-		// トグルが OFF でも表示する（出し分けのために設定画面を描き直さない）
-		new Setting(containerEl)
-			.setName(TEXT.checkSectionName)
-			.setDesc(TEXT.checkSectionDesc)
-			.addText((text) =>
-				text
-					.setPlaceholder(DEFAULT_SETTINGS.checkSectionHeading)
-					.setValue(this.plugin.settings.checkSectionHeading)
-					.onChange(async (value) => {
-						this.plugin.settings.checkSectionHeading = value.trim();
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		const templateSetting = new Setting(containerEl)
-			.setName(TEXT.templateName)
-			.setDesc(TEXT.templateDesc);
-		const templateWarning = templateSetting.descEl.createDiv({ cls: 'study-curve-form-error' });
+	private buildTemplateSetting(setting: Setting): void {
+		setting.setName(TEXT.templateName).setDesc(TEXT.templateDesc);
+		const templateWarning = setting.descEl.createDiv({ cls: 'study-curve-form-error' });
 		// 1文字ごとに確かめると入力の途中で警告が出るので、開いたときと入力欄から離れたとき、候補を選んだときに確かめる
 		const checkTemplate = (value: string) => {
 			const missing = value.trim() !== '' && findNoteTemplate(this.app, value) === null;
 			templateWarning.setText(missing ? TEXT.templateMissing : '');
 		};
-		templateSetting.addText((text) => {
+		setting.addText((text) => {
 			text
 				.setPlaceholder(TEXT.templatePlaceholder)
 				.setValue(this.plugin.settings.noteTemplatePath)
@@ -531,64 +623,77 @@ export class StudyCurveSettingTab extends PluginSettingTab {
 			new FileSuggest(this.app, text.inputEl, () => checkTemplate(text.getValue()));
 		});
 		checkTemplate(this.plugin.settings.noteTemplatePath);
+	}
 
-		new Setting(containerEl).setName('デッキ（資格・科目）').setHeading();
-		containerEl.createEl('p', {
-			cls: 'setting-item-description',
-			text: 'フォルダは未登録ノートの洗い出しと、ノート登録時のデッキ自動判定に使う。試験日を入れると、それを越える復習予定は試験日当日まで前倒しされる。',
-		});
-
-		if (this.plugin.settings.decks.length === 0) {
-			containerEl.createEl('p', { cls: 'setting-item-description', text: TEXT.noDecks });
-		}
-
-		// 行は表示だけにし、直すのは編集のダイアログで行う（入力の途中の値を保存しない。#26）。
-		// ノートの件数は描いた時点のもの（インデックスの変化で描き直すと、入力中の欄のカーソルが飛ぶため）
+	/**
+	 * 設定済みのデッキの行。行は表示だけにし、直すのは編集のダイアログで行う（入力の途中の値を保存しない。#26）。
+	 * ノートの件数と警告は、最初の行を描くときに一度だけ数える（getSettingDefinitions は起動中にも呼ばれるため、
+	 * 行を作るだけでは Vault を読まない）。件数は描いた時点のもの
+	 * （インデックスの変化で描き直すと、入力中の欄のカーソルが飛ぶため）
+	 */
+	private deckRows(): SettingRow[] {
 		const decks = this.plugin.settings.decks;
-		const counts = countNotesByDeck(this.plugin.getIndex().notes);
-		// ダイアログのフォルダの警告（DeckEditModal）と同じく、保存するときと同じ整え方をしてから確かめる
-		const warnings = deckListWarnings(
-			decks,
-			(folder) =>
-				this.app.vault.getAbstractFileByPath(normalizeFolderInput(folder)) instanceof TFolder,
-		);
-		const today = todayISO();
-		decks.forEach((deck, index) => {
-			const setting = new Setting(containerEl)
-				.setName(deck.name.trim() === '' ? TEXT.unnamed : deck.name)
-				.setDesc(
-					createFragment((fragment) => {
-						fragment.createDiv({
-							cls: 'study-curve-deck-summary',
-							text: TEXT.deckSummary(
-								deck.folder === '' ? TEXT.noFolder : deck.folder,
-								examDateLabel(deck.examDate, today),
-								counts.get(deck.name) ?? 0,
-							),
-						});
-						for (const warning of warnings[index] ?? []) {
-							fragment.createDiv({ cls: 'study-curve-deck-row-warning', text: warning.message });
-						}
-					}),
-				)
-				.addExtraButton((button) =>
-					button
-						.setIcon('pencil')
-						.setTooltip(TEXT.edit)
-						.onClick(() => this.openEdit(deck)),
-				)
-				.addExtraButton((button) =>
-					button
-						.setIcon('trash')
-						.setTooltip('このデッキを削除')
-						.onClick(() => this.confirmRemove(deck)),
-				);
-			setting.settingEl.addClass('study-curve-deck-row');
+		let summary: { counts: Map<string, number>; warnings: ReturnType<typeof deckListWarnings>; today: string } | null =
+			null;
+		const summarize = () => {
+			summary ??= {
+				counts: countNotesByDeck(this.plugin.getIndex().notes),
+				// ダイアログのフォルダの警告（DeckEditModal）と同じく、保存するときと同じ整え方をしてから確かめる
+				warnings: deckListWarnings(
+					decks,
+					(folder) =>
+						this.app.vault.getAbstractFileByPath(normalizeFolderInput(folder)) instanceof TFolder,
+				),
+				today: todayISO(),
+			};
+			return summary;
+		};
+		return decks.map((deck, index) => {
+			const name = deck.name.trim() === '' ? TEXT.unnamed : deck.name;
+			return {
+				name,
+				desc: deck.folder,
+				build: (setting) => {
+					const { counts, warnings, today } = summarize();
+					setting
+						.setName(name)
+						.setDesc(
+							createFragment((fragment) => {
+								fragment.createDiv({
+									cls: 'study-curve-deck-summary',
+									text: TEXT.deckSummary(
+										deck.folder === '' ? TEXT.noFolder : deck.folder,
+										examDateLabel(deck.examDate, today),
+										counts.get(deck.name) ?? 0,
+									),
+								});
+								for (const warning of warnings[index] ?? []) {
+									fragment.createDiv({ cls: 'study-curve-deck-row-warning', text: warning.message });
+								}
+							}),
+						)
+						.addExtraButton((button) =>
+							button
+								.setIcon('pencil')
+								.setTooltip(TEXT.edit)
+								.onClick(() => this.openEdit(deck)),
+						)
+						.addExtraButton((button) =>
+							button
+								.setIcon('trash')
+								.setTooltip(TEXT.removeDeck)
+								.onClick(() => this.confirmRemove(deck)),
+						);
+					setting.settingEl.addClass('study-curve-deck-row');
+				},
+			};
 		});
+	}
 
-		new Setting(containerEl).addButton((button) =>
+	private addCreateDeckButton(setting: Setting): void {
+		setting.addButton((button) =>
 			button
-				.setButtonText('デッキを追加')
+				.setButtonText(TEXT.addDeck)
 				.setCta()
 				.onClick(() => {
 					// 仮の名前のデッキは作らず、ボードの案内と同じダイアログで名前などを入れてもらう
@@ -599,11 +704,16 @@ export class StudyCurveSettingTab extends PluginSettingTab {
 							const added = await this.plugin.actions.addDecks([deck]);
 							if (added === null) return false; // 保存に失敗（通知は actions が出す）
 							if (added > 0) new Notice(TEXT.deckCreated(deck.name));
-							this.display();
+							this.refreshIfShown();
 							return true;
 						},
 					}).open();
 				}),
 		);
 	}
+}
+
+/** 設定画面の1行を、Obsidian 1.13 以上の宣言的な定義にする（#1） */
+function toDefinition(row: SettingRow): SettingDefinition {
+	return { name: row.name, desc: row.desc, render: (setting) => row.build(setting) };
 }

@@ -30,6 +30,10 @@ export function normalizePath(path: string): string {
 
 // settings.ts（mergeSettings のテスト）が import するクラス。中身は使わない
 export class PluginSettingTab {}
+/** テストでは Obsidian 1.13 より古い版として振る舞う（設定画面の描き直しは display の経路） */
+export function requireApiVersion(_version: string): boolean {
+	return false;
+}
 export class Setting {}
 // settings.ts が import するデッキ作成ダイアログ（DeckEditModal、FolderSuggest）が継承するクラス
 export class Modal {}
