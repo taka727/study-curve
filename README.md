@@ -240,8 +240,11 @@ Across devices:
 
 What it reads:
 
-- The frontmatter of every Markdown note in the vault (from Obsidian's metadata cache), to find enrolled notes. A note can be enrolled in any folder, so every note is checked. Nothing it reads leaves your vault
-- The paths of your folders and notes, for the suggestions in the deck folder and "Review note template" fields
+- **Vault enumeration: it lists every Markdown file and folder in the vault, so it has access to every file path in the vault.** It uses the list for two things only:
+  - Finding enrolled notes. A note can be enrolled in any folder, so it checks the frontmatter of every Markdown note (from Obsidian's metadata cache)
+  - The suggestions in the deck folder and "Review note template" fields, which show folder and note paths
+
+  The paths and frontmatter it reads never leave your vault
 - The template file set in "Review note template", when you create a review note
 - Only when "Clear checks after grading" is on: the body of the note you grade
 - Only when you run "Add self-check section to this note": the body of the open note
